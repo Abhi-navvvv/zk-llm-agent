@@ -1,0 +1,27 @@
+# Node / Frontend
+node_modules/
+.next/
+out/
+.env*.local
+
+# Rust / SP1
+target/
+elf/
+*.key
+proof.json
+settings.json
+witness.json
+
+# Python / ML
+__pycache__/
+*.pyc
+venv/
+.venv/
+weights/
+*.safetensors
+*.bin
+*.onnx
+
+# System / IDEs
+.DS_Store
+.vscode/

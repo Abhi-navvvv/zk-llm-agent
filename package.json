@@ -1,0 +1,13 @@
+{
+  "name": "zk-llm-agent-root",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter @zk-llm/web dev",
+    "build:web": "pnpm --filter @zk-llm/web build",
+    "start:web": "pnpm --filter @zk-llm/web start"
+  }
+}

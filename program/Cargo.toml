@@ -1,0 +1,8 @@
+[package]
+name = "zk-llm-program"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sp1-zkvm = { version = "6.2.3" }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
