@@ -55,26 +55,26 @@ export default function Home() {
     setProofBytes("");
     setPublicValues("");
     
-    appendLog("🚀 Initializing off-chain zk-LLM Agent pipeline...", "info");
+    appendLog("🚀 Launching off-chain ZK-ML Agent pipeline...", "info");
     await sleep(800);
     
     // 1. Tokenization
-    appendLog(`Tokenizing input parameters: Trend = ${trend}, Volatility = ${volatility}`, "info");
+    appendLog(`Tokenizing inputs: Trend = ${trend}, Volatility = ${volatility}`, "info");
     const prompt = ["<bos>", "MARKET", trend, "VOLATILITY", volatility, "ACTION"];
     const inputIdx = prompt.map(t => VOCAB_MAP[t]);
     while (inputIdx.length < 8) {
       inputIdx.push(VOCAB_MAP["<pad>"]);
     }
     await sleep(800);
-    appendLog(`Generated input tokens: [${inputIdx.join(", ")}]`, "dim");
+    appendLog(`Prompt input tokens generated: [${inputIdx.join(", ")}]`, "dim");
     await sleep(600);
 
     // 2. Guest Execution
-    appendLog("Booting guest program inside SP1 zkVM executor (RV32IM)...", "info");
+    appendLog("Instantiating Guest Program inside SP1 zkVM executor (RV32IM)...", "info");
     await sleep(1000);
-    appendLog("Loading model weight constraints... W_emb=[17,8], W1=[8,16], W2=[16,3]", "dim");
+    appendLog("Model layout: embedding[17, 8], fc1[8, 16], fc2[16, 3]", "dim");
     await sleep(600);
-    appendLog("Executing Model Forward Pass:", "info");
+    appendLog("Running forward propagation inside ZKVM...", "info");
     
     // Evaluate model logic
     let predictedAction = "HOLD";
@@ -96,21 +96,21 @@ export default function Home() {
     }
     
     await sleep(800);
-    appendLog(`  Embedding mean pooling resolved shape: [8]`, "dim");
+    appendLog(`  Embedding layer mapping resolved shape: [8]`, "dim");
     await sleep(500);
-    appendLog(`  Layer 1 MLP activation (ReLU) completed. Cycles: 142`, "dim");
+    appendLog(`  FC1 linear activation (ReLU) completed. Cycles: 142`, "dim");
     await sleep(700);
-    appendLog(`  Layer 2 Logits: BUY_ETH: ${logits[0].toFixed(4)}, BUY_USDC: ${logits[1].toFixed(4)}, HOLD: ${logits[2].toFixed(4)}`, "dim");
+    appendLog(`  FC2 logits: BUY_ETH: ${logits[0].toFixed(4)}, BUY_USDC: ${logits[1].toFixed(4)}, HOLD: ${logits[2].toFixed(4)}`, "dim");
     await sleep(600);
-    appendLog(`🎯 Model inference succeeded. Decision: ${predictedAction} (token ${predToken})`, "success");
+    appendLog(`🎯 Model inference complete. Optimal Action: ${predictedAction} (token ${predToken})`, "success");
     await sleep(800);
 
     // 3. Proving
     setStatus("proving");
-    appendLog("Initiating ZK Proof Generation (Groth16 wrapper)...", "warn");
-    appendLog("Generating witness data from instruction trace...", "dim");
+    appendLog("Initiating ZK Proof Generation (Groth16)...", "warn");
+    appendLog("Assembling witness from execution trace...", "dim");
     await sleep(1200);
-    appendLog("Fusing arithmetic constraints... Proving 3,142 instructions", "dim");
+    appendLog("Proving trace path constraints: 3,142 total steps", "dim");
     await sleep(1500);
     
     // Mock proof hex values
@@ -120,19 +120,19 @@ export default function Home() {
     setProofBytes(mockProof);
     setPublicValues(mockPublicValues);
     
-    appendLog("✅ Zero-Knowledge Proof generated successfully!", "success");
-    appendLog(`  Proof Size: 256 bytes`, "dim");
-    appendLog(`  Program Image ID: ${PROGRAM_VKEY}`, "dim");
+    appendLog("✅ ZK Proof (Groth16) successfully established!", "success");
+    appendLog(`  Proof payload size: 256 bytes`, "dim");
+    appendLog(`  Model Image ID: ${PROGRAM_VKEY}`, "dim");
     await sleep(1000);
 
     // 4. Contract Execution
     setStatus("contract");
-    appendLog("Submitting verified payload to LLMAgentVault.sol...", "info");
-    appendLog(`  Contract Address: 0xe93F91A80...`, "dim");
+    appendLog("Submitting verification transaction to LLMAgentVault.sol...", "info");
+    appendLog(`  Vault address: 0xe93F91A80...`, "dim");
     await sleep(1000);
-    appendLog("Vault invoking ISP1Verifier(0x71C...).verifyProof()...", "info");
+    appendLog("Verifying proof via on-chain SP1 Verifier contract...", "info");
     await sleep(1200);
-    appendLog("✅ ZK Proof verified on-chain. State matches Image ID.", "success");
+    appendLog("✅ Cryptographic validation succeeded. Execution matches constraints.", "success");
     await sleep(800);
     
     // Perform swaps in state
@@ -140,21 +140,21 @@ export default function Home() {
       const usdcToSwap = usdcBalance / 2;
       setUsdcBalance(prev => prev - usdcToSwap);
       setEthBalance(prev => prev + (usdcToSwap / 3000));
-      appendLog(`Vault Action: Swap ${usdcToSwap.toFixed(2)} USDC to ${(usdcToSwap / 3000).toFixed(4)} ETH`, "success");
+      appendLog(`Swap Execution: Rebalanced ${usdcToSwap.toFixed(2)} USDC to ${(usdcToSwap / 3000).toFixed(4)} ETH`, "success");
     } else if (predictedAction === "BUY_USDC") {
       const ethToSwap = ethBalance / 2;
       setEthBalance(prev => prev - ethToSwap);
       setUsdcBalance(prev => prev + (ethToSwap * 3000));
-      appendLog(`Vault Action: Swap ${ethToSwap.toFixed(4)} ETH to ${(ethToSwap * 3000).toFixed(2)} USDC`, "success");
+      appendLog(`Swap Execution: Rebalanced ${ethToSwap.toFixed(4)} ETH to ${(ethToSwap * 3000).toFixed(2)} USDC`, "success");
     } else {
-      appendLog(`Vault Action: No rebalancing triggered (HOLD state)`, "info");
+      appendLog(`No balance swap needed (HOLD State)`, "info");
     }
     
     setLastAction(predictedAction);
     await sleep(800);
     
-    appendLog("🎉 Rebalance transaction completed successfully!", "success");
-    appendLog(`Transaction Hash: 0x${Array.from({length: 40}, () => Math.floor(Math.random()*16).toString(16)).join("")}`, "dim");
+    appendLog("🎉 Vault allocation completed & settled on-chain!", "success");
+    appendLog(`Tx Hash: 0x${Array.from({length: 40}, () => Math.floor(Math.random()*16).toString(16)).join("")}`, "dim");
     setStatus("success");
   };
 
@@ -188,273 +188,291 @@ export default function Home() {
   };
 
   return (
-    <div className="container">
-      {/* Header Banner */}
-      <header>
-        <div className="logo-section">
-          <div className="logo-box">ZK</div>
-          <span className="logo-text">LLM Agent Vault</span>
-        </div>
-        <button className="wallet-btn">
-          <div className="dot"></div>
-          Connected: 0xab...f53c
-        </button>
-      </header>
-
-      {/* Hero Intro */}
-      <div className="hero-section">
-        <div className="hero-tag">Verifiable Off-Chain Intelligence</div>
-        <h1 className="hero-title">Proof-of-Honesty Agent Portal</h1>
-        <p className="hero-subtitle">
-          Rebalance a DeFi vault trustlessly using a neural network running inside the SP1 zkVM. Select market indicators below to witness off-chain inference and on-chain verification.
-        </p>
+    <>
+      {/* Galactic Starry Background */}
+      <div className="galaxy-background">
+        <div className="stars-small"></div>
+        <div className="stars-medium"></div>
+        <div className="stars-large"></div>
+        <div className="nebula-purple"></div>
+        <div className="nebula-cyan"></div>
+        <div className="nebula-pink"></div>
       </div>
 
-      {/* Dynamic Progress Pipeline */}
-      <div className="pipeline-container">
-        <div className={`pipeline-step ${getStepClass(1)}`}>
-          <div className="step-indicator">1</div>
-          <div className="step-label">Tokenize Inputs</div>
-        </div>
-        <div className={`pipeline-step ${getStepClass(2)}`}>
-          <div className="step-indicator">2</div>
-          <div className="step-label">ZKVM Inference</div>
-        </div>
-        <div className={`pipeline-step ${getStepClass(3)}`}>
-          <div className="step-indicator">3</div>
-          <div className="step-label">ZK Proving</div>
-        </div>
-        <div className={`pipeline-step ${getStepClass(4)}`}>
-          <div className="step-indicator">4</div>
-          <div className="step-label">On-Chain Verify</div>
-        </div>
-      </div>
-
-      {/* Dashboard Grid */}
-      <div className="dashboard-grid">
-        
-        {/* Left Control Column */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
-          
-          {/* Inference Inputs Card */}
-          <div className="glass-card">
-            <div className="card-number">_01.</div>
-            <h3 className="card-title">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-              </svg>
-              Inference Inputs
-            </h3>
-            
-            <div className="input-group">
-              <label className="input-label">Market Trend</label>
-              <select 
-                className="select-input"
-                value={trend}
-                onChange={(e) => setTrend(e.target.value)}
-                disabled={status !== "idle" && status !== "success"}
-              >
-                <option value="BULL">BULL (Low Risk, Upside)</option>
-                <option value="BEAR">BEAR (High Risk, Downside)</option>
-                <option value="CRAB">CRAB (Neutral Range)</option>
-              </select>
-            </div>
-
-            <div className="input-group">
-              <label className="input-label">Mempool Volatility</label>
-              <select 
-                className="select-input"
-                value={volatility}
-                onChange={(e) => setVolatility(e.target.value)}
-                disabled={status !== "idle" && status !== "success"}
-              >
-                <option value="LOW">LOW (Stable Market)</option>
-                <option value="HIGH">HIGH (Extreme Fluctuations)</option>
-              </select>
-            </div>
-
-            <button 
-              className="action-btn"
-              onClick={handleRunInference}
-              disabled={status !== "idle" && status !== "success"}
-            >
-              {status === "idle" && "Trigger Decision"}
-              {status === "running" && "Executing Guest..."}
-              {status === "proving" && "Generating Proof..."}
-              {status === "contract" && "Verifying On-Chain..."}
-              {status === "success" && "Trigger New Decision"}
-            </button>
+      <div className="container">
+        {/* Header Banner */}
+        <header>
+          <div className="logo-section">
+            <div className="logo-box">Φ</div>
+            <span className="logo-text">ZK-LLM VAULT ENGINE</span>
           </div>
+          <button className="wallet-btn">
+            <div className="dot"></div>
+            Connected: 0xab...f53c
+          </button>
+        </header>
 
-          {/* Vault Balance Overview */}
-          <div className="glass-card">
-            <div className="card-number">_02.</div>
-            <h3 className="card-title">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              LLMAgentVault.sol
-            </h3>
-            
-            <div className="balance-list">
-              <div className="balance-item">
-                <span className="balance-name">USDC Balance</span>
-                <span className="balance-val">${usdcBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-              </div>
-              <div className="balance-item">
-                <span className="balance-name">ETH Balance</span>
-                <span className="balance-val">{ethBalance.toFixed(4)} ETH</span>
-              </div>
-              <div className="balance-item" style={{ borderTop: "1px dashed rgba(255,255,255,0.08)", paddingTop: "1rem", marginTop: "0.5rem" }}>
-                <span className="balance-name" style={{ fontWeight: "bold", color: "#ffffff" }}>Total Asset Value</span>
-                <span className="balance-val" style={{ color: "var(--mint)", fontSize: "1.1rem" }}>${totalValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-              </div>
-            </div>
+        {/* Hero Intro */}
+        <div className="hero-section">
+          <div className="hero-tag">System Node: Operational</div>
+          <h1 className="hero-title">Verifiable AI Portfolio Agent</h1>
+          <p className="hero-subtitle">
+            Execute secure, proof-of-honesty asset allocation using zero-knowledge machine learning (ZK-ML). The trading model runs inside the SP1 ZKVM to generate cryptographic verification.
+          </p>
+        </div>
 
-            {/* Asset Allocation Bar Chart */}
-            <div className="visual-bar-container">
-              <div className="visual-bar-labels">
-                <span>USDC: {usdcPercent.toFixed(0)}%</span>
-                <span>ETH: {ethPercent.toFixed(0)}%</span>
-              </div>
-              <div className="visual-bar">
-                <div className="visual-bar-fill-usdc" style={{ width: `${usdcPercent}%` }}></div>
-                <div className="visual-bar-fill-eth" style={{ width: `${ethPercent}%` }}></div>
-              </div>
+        {/* Dynamic Progress Pipeline */}
+        <div className="pipeline-container">
+          <div className={`pipeline-step ${getStepClass(1)}`}>
+            <div className="step-indicator">I</div>
+            <div className="step-text-container">
+              <span className="step-num">Step 01</span>
+              <span className="step-label">Tokenize Inputs</span>
             </div>
           </div>
-
+          <div className={`pipeline-step ${getStepClass(2)}`}>
+            <div className="step-indicator">II</div>
+            <div className="step-text-container">
+              <span className="step-num">Step 02</span>
+              <span className="step-label">zkVM Inference</span>
+            </div>
+          </div>
+          <div className={`pipeline-step ${getStepClass(3)}`}>
+            <div className="step-indicator">III</div>
+            <div className="step-text-container">
+              <span className="step-num">Step 03</span>
+              <span className="step-label">ZK Proving</span>
+            </div>
+          </div>
+          <div className={`pipeline-step ${getStepClass(4)}`}>
+            <div className="step-indicator">IV</div>
+            <div className="step-text-container">
+              <span className="step-num">Step 04</span>
+              <span className="step-label">On-Chain Verify</span>
+            </div>
+          </div>
         </div>
 
-        {/* Right Console Output Column */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+        {/* Dashboard Grid */}
+        <div className="dashboard-grid">
           
-          {/* Terminal Console */}
-          <div className="terminal-wrapper">
-            <div className="terminal-header">
-              <div className="terminal-buttons">
-                <div className="terminal-btn close"></div>
-                <div className="terminal-btn minimize"></div>
-                <div className="terminal-btn expand"></div>
-              </div>
-              <div className="terminal-title">zkvm-sh</div>
-            </div>
+          {/* Left Control Column */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
             
-            <div className="terminal-body">
-              {logs.length === 0 ? (
-                <div className="terminal-line dim">&gt; zkvm-sh: ready for execution. Click "Trigger Decision" to execute the off-chain model inside the ZKVM.</div>
-              ) : (
-                logs.map((log, i) => (
-                  <div key={i} className={`terminal-line ${log.type}`}>
-                    <span className="terminal-line dim">[{log.time}]</span> {log.text}
+            {/* Inference Inputs Card */}
+            <div className="glass-card">
+              <h3 className="card-title">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+                Inference Inputs
+              </h3>
+              
+              <div className="input-group">
+                <label className="input-label">Market Trend Selection</label>
+                <div className="segmented-control">
+                  {["BULL", "BEAR", "CRAB"].map((opt) => (
+                    <button
+                      key={opt}
+                      className={`segment-btn ${trend === opt ? "active" : ""}`}
+                      onClick={() => setTrend(opt)}
+                      disabled={status !== "idle" && status !== "success"}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="input-group" style={{ marginBottom: "2rem" }}>
+                <label className="input-label">Mempool Volatility Index</label>
+                <div className="segmented-control">
+                  {["LOW", "HIGH"].map((opt) => (
+                    <button
+                      key={opt}
+                      className={`segment-btn ${volatility === opt ? "active" : ""}`}
+                      onClick={() => setVolatility(opt)}
+                      disabled={status !== "idle" && status !== "success"}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button 
+                className="action-btn"
+                onClick={handleRunInference}
+                disabled={status !== "idle" && status !== "success"}
+              >
+                {status === "idle" && "Trigger Rebalance Pipeline"}
+                {status === "running" && "Executing Guest..."}
+                {status === "proving" && "Generating ZK Proof..."}
+                {status === "contract" && "Verifying On-Chain..."}
+                {status === "success" && "Trigger New Inference"}
+              </button>
+            </div>
+
+            {/* Vault Balance Overview */}
+            <div className="glass-card">
+              <h3 className="card-title">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                LLMAgentVault.sol State
+              </h3>
+              
+              <div className="balance-list">
+                <div className="balance-item">
+                  <span className="balance-name">USDC Reserve</span>
+                  <span className="balance-val">${usdcBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                </div>
+                <div className="balance-item">
+                  <span className="balance-name">ETH Reserve</span>
+                  <span className="balance-val">{ethBalance.toFixed(4)} ETH</span>
+                </div>
+                <div className="balance-item" style={{ borderTop: "1px dashed rgba(255,255,255,0.06)", paddingTop: "1rem", marginTop: "0.5rem" }}>
+                  <span className="balance-name" style={{ fontWeight: "bold", color: "#ffffff" }}>Vault Net Asset Value</span>
+                  <span className="balance-val" style={{ color: "var(--cyan)", fontSize: "1.05rem" }}>${totalValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                </div>
+              </div>
+
+              {/* Asset Allocation Bar Chart */}
+              <div className="visual-bar-container">
+                <div className="visual-bar-labels">
+                  <span>USDC: {usdcPercent.toFixed(0)}%</span>
+                  <span>ETH: {ethPercent.toFixed(0)}%</span>
+                </div>
+                <div className="visual-bar">
+                  <div className="visual-bar-fill-usdc" style={{ width: `${usdcPercent}%` }}></div>
+                  <div className="visual-bar-fill-eth" style={{ width: `${ethPercent}%` }}></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Right Console Output Column */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+            
+            {/* Terminal Console */}
+            <div className="terminal-wrapper">
+              <div className="terminal-header">
+                <div className="terminal-buttons">
+                  <div className="terminal-btn close"></div>
+                  <div className="terminal-btn minimize"></div>
+                  <div className="terminal-btn expand"></div>
+                </div>
+                <div className="terminal-title">zkvm-sh</div>
+              </div>
+              
+              <div className="terminal-body">
+                {logs.length === 0 ? (
+                  <div className="terminal-line dim">&gt; zkvm-sh: ready for execution. Configure inputs and click "Trigger Rebalance Pipeline" to run.</div>
+                ) : (
+                  logs.map((log, i) => (
+                    <div key={i} className={`terminal-line ${log.type}`}>
+                      <span className="terminal-line dim">[{log.time}]</span> {log.text}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Cryptographic Proof Details */}
+            <div className="glass-card">
+              <h3 className="card-title">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                Cryptographic Proof Elements
+              </h3>
+
+              <div className="proof-container">
+                <div className="proof-item">
+                  <div className="proof-header-row">
+                    <div className="proof-label">Program Image ID (VKey)</div>
+                    <button className="copy-btn" onClick={() => copyToClipboard(PROGRAM_VKEY, "vkey")}>
+                      {copiedId === "vkey" ? "Copied!" : (
+                        <>
+                          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                          </svg>
+                          Copy
+                        </>
+                      )}
+                    </button>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Cryptographic Proof Details */}
-          <div className="glass-card">
-            <div className="card-number">_03.</div>
-            <h3 className="card-title">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-              Cryptographic Proof Elements
-            </h3>
-
-            <div className="proof-container">
-              <div className="proof-item">
-                <div className="proof-header-row">
-                  <div className="proof-label">Program Image ID (VKey)</div>
-                  <button className="copy-btn" onClick={() => copyToClipboard(PROGRAM_VKEY, "vkey")}>
-                    {copiedId === "vkey" ? "Copied!" : (
-                      <>
-                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                        </svg>
-                        Copy
-                      </>
-                    )}
-                  </button>
+                  <div className="proof-value-box">{PROGRAM_VKEY}</div>
                 </div>
-                <div className="proof-value-box">{PROGRAM_VKEY}</div>
-              </div>
 
-              <div className="proof-item">
-                <div className="proof-header-row">
-                  <div className="proof-label">Public Values Commitment</div>
-                  <button className="copy-btn" onClick={() => copyToClipboard(publicValues, "pubval")} disabled={!publicValues}>
-                    {copiedId === "pubval" ? "Copied!" : (
-                      <>
-                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                        </svg>
-                        Copy
-                      </>
-                    )}
-                  </button>
+                <div className="proof-item">
+                  <div className="proof-header-row">
+                    <div className="proof-label">Public Values Commitment</div>
+                    <button className="copy-btn" onClick={() => copyToClipboard(publicValues, "pubval")} disabled={!publicValues}>
+                      {copiedId === "pubval" ? "Copied!" : (
+                        <>
+                          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                          </svg>
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="proof-value-box">
+                    {publicValues || "Waiting for execution trace..."}
+                  </div>
                 </div>
-                <div className="proof-value-box">
-                  {publicValues || "Waiting for execution..."}
+
+                <div className="proof-item">
+                  <div className="proof-header-row">
+                    <div className="proof-label">ZK Proof Seal (Groth16)</div>
+                    <button className="copy-btn" onClick={() => copyToClipboard(proofBytes, "proof")} disabled={!proofBytes}>
+                      {copiedId === "proof" ? "Copied!" : (
+                        <>
+                          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                          </svg>
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="proof-value-box">
+                    {proofBytes || "Waiting for execution trace..."}
+                  </div>
                 </div>
               </div>
 
-              <div className="proof-item">
-                <div className="proof-header-row">
-                  <div className="proof-label">ZK Proof Seal (Groth16 Wrapper)</div>
-                  <button className="copy-btn" onClick={() => copyToClipboard(proofBytes, "proof")} disabled={!proofBytes}>
-                    {copiedId === "proof" ? "Copied!" : (
-                      <>
-                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                        </svg>
-                        Copy
-                      </>
-                    )}
-                  </button>
+              {/* Cryptographic Trust Shield */}
+              <div className="verification-badge-container">
+                <div className="badge-icon">
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="20" height="20">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
                 </div>
-                <div className="proof-value-box">
-                  {proofBytes || "Waiting for execution..."}
+                <div className="badge-text">
+                  <span className="badge-title">Verification Shield Active</span>
+                  <span className="badge-desc">Off-chain inference validated mathematically via SP1 ZK-Verifier.</span>
                 </div>
               </div>
             </div>
+
           </div>
-
         </div>
+
+        {/* Footer */}
+        <footer>
+          <div>© 2026 ZK-LLM Vault Protocol. All execution verified.</div>
+          <div>
+            Built with Next.js & SP1 zkVM ·{" "}
+            <a href="https://github.com/Abhi-navvvv/zk-llm-agent" target="_blank" rel="noreferrer" className="footer-link">
+              GitHub
+            </a>
+          </div>
+        </footer>
       </div>
-
-      {/* Marquee Ticker */}
-      <div className="marquee-container">
-        <div className="marquee-content">
-          <div className="marquee-item">SP1 ZKVM</div>
-          <div className="marquee-item">Groth16 Prover</div>
-          <div className="marquee-item">Verifiable ML Inference</div>
-          <div className="marquee-item">Solidity Verifier</div>
-          <div className="marquee-item">DeFi Rebalancing Agent</div>
-          <div className="marquee-item">Zero-Knowledge Machine Learning</div>
-          <div className="marquee-item">Trustless Execution</div>
-          {/* Duplicate items for infinite marquee loop */}
-          <div className="marquee-item">SP1 ZKVM</div>
-          <div className="marquee-item">Groth16 Prover</div>
-          <div className="marquee-item">Verifiable ML Inference</div>
-          <div className="marquee-item">Solidity Verifier</div>
-          <div className="marquee-item">DeFi Rebalancing Agent</div>
-          <div className="marquee-item">Zero-Knowledge Machine Learning</div>
-          <div className="marquee-item">Trustless Execution</div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <footer>
-        <div>© 2026 Abhinav Singh · Autonomous Agent Portal</div>
-        <div>
-          Built with Next.js & SP1 zkVM ·{" "}
-          <a href="https://github.com/Abhi-navvvv" target="_blank" rel="noreferrer" className="footer-link">
-            GitHub
-          </a>
-        </div>
-      </footer>
-    </div>
+    </>
   );
 }
