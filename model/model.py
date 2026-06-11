@@ -126,8 +126,9 @@ def generate_synthetic_data(num_samples=1000):
     return np.array(data), np.array(targets)
 
 def train_and_export():
-    os.makedirs("/Users/abhiii/.gemini/antigravity/scratch/zk-llm-agent/model", exist_ok=True)
-    os.makedirs("/Users/abhiii/.gemini/antigravity/scratch/zk-llm-agent/model/weights", exist_ok=True)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    weights_dir = os.path.join(script_dir, "weights")
+    os.makedirs(weights_dir, exist_ok=True)
     
     # Generate data
     x_train, y_train = generate_synthetic_data(1000)
@@ -142,18 +143,18 @@ def train_and_export():
     )
     
     print("Training micro MLP model in pure NumPy...")
-    for epoch in range(100):
+    for epoch in range(200):
         probs = model.forward(x_train)
-        model.backward(y_train, lr=0.1)
+        model.backward(y_train, lr=1.0)
         
         # Validate
         val_probs = model.forward(x_val)
         val_preds = np.argmax(val_probs, axis=1)
         acc = np.mean(val_preds == y_val)
         
-        if (epoch + 1) % 10 == 0:
+        if (epoch + 1) % 20 == 0:
             loss = -np.mean(np.log(probs[np.arange(len(y_train)), y_train] + 1e-15))
-            print(f"Epoch {epoch+1}/100 - Loss: {loss:.4f} - Val Acc: {acc:.4f}")
+            print(f"Epoch {epoch+1}/200 - Loss: {loss:.4f} - Val Acc: {acc:.4f}")
             
     # Save weights to binary format for Rust
     # Layout order:
@@ -179,7 +180,7 @@ def train_and_export():
         t_f32 = t.astype(np.float32)
         weights_bin.extend(t_f32.tobytes())
         
-    with open("/Users/abhiii/.gemini/antigravity/scratch/zk-llm-agent/model/weights/weights.bin", "wb") as f:
+    with open(os.path.join(weights_dir, "weights.bin"), "wb") as f:
         f.write(weights_bin)
         
     print("Exported weights.bin successfully!")
@@ -194,7 +195,7 @@ def train_and_export():
         "max_len": MAX_LEN,
         "class_tokens": CLASS_TOKENS
     }
-    with open("/Users/abhiii/.gemini/antigravity/scratch/zk-llm-agent/model/weights/config.json", "w") as f:
+    with open(os.path.join(weights_dir, "config.json"), "w") as f:
         json.dump(config, f, indent=2)
         
     # Write a sample input/output test case to verify Rust correctness
@@ -218,7 +219,7 @@ def train_and_export():
         "pred_token": int(test_pred_token),
         "pred_word": INV_VOCAB_MAP[test_pred_token]
     }
-    with open("/Users/abhiii/.gemini/antigravity/scratch/zk-llm-agent/model/weights/test_case.json", "w") as f:
+    with open(os.path.join(weights_dir, "test_case.json"), "w") as f:
         json.dump(test_case, f, indent=2)
     print("Exported test_case.json successfully!")
 
