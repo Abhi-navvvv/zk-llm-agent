@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "zk-LLM Autonomous Agent Portal",
-  description: "Autonomous DeFi portfolio agent leveraging SP1 zero-knowledge machine learning proofs",
+  title: "zk-ML Agent Vault — Verifiable DeFi Rebalancing",
+  description: "A DeFi vault managed by a ZK-verified ML classifier running inside the SP1 zkVM. Real model inference with simulated proof generation.",
 };
 
 export default function RootLayout({
