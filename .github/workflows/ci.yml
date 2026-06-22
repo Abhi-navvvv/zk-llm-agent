@@ -25,6 +25,14 @@ jobs:
         python -m venv venv
         venv/bin/pip install numpy
 
+    - name: Run Python model tests
+      run: venv/bin/python model/test_model.py
+
+    - name: Train model and copy weights
+      run: |
+        venv/bin/python model/model.py
+        node scripts/copy-weights.js
+
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
@@ -38,22 +46,15 @@ jobs:
     - name: Install pnpm dependencies
       run: pnpm install
 
-    - name: Install Playwright Browsers
-      run: pnpm --filter web exec playwright install --with-deps chromium
-
-    - name: Set up Protoc
-      uses: arduino/setup-protoc@v3
-      with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Set up Rust
-      uses: dtolnay/rust-toolchain@stable
-
     - name: Set up Foundry
       uses: foundry-rs/foundry-toolchain@v1
 
-    - name: Train model and copy weights
-      run: make train
+    - name: Run Solidity tests
+      working-directory: contracts
+      run: forge test -vvv
 
-    - name: Run CI Test Suite
-      run: make test-all
+    - name: Install Playwright Browsers
+      run: pnpm --filter web exec playwright install --with-deps chromium
+
+    - name: Run E2E tests
+      run: pnpm --filter web test:e2e
