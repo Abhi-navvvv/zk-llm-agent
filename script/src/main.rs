@@ -1,6 +1,7 @@
 use sp1_sdk::{include_elf, ProverClient, SP1Stdin, HashableKey, Elf, Prover, ProvingKey, ProveRequest};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 
 // Compile and load the guest program ELF automatically at build time
@@ -8,8 +9,8 @@ const ELF: Elf = include_elf!("zk-llm-program");
 
 #[derive(Serialize, Deserialize, Debug)]
 struct TestCase {
-    prompt: Vec<String>,
-    input_idx: Vec<usize>,
+    features: Vec<f32>,
+    scaled_features: Vec<i32>,
     probs: Vec<f32>,
     pred_class: usize,
     pred_token: usize,
@@ -19,8 +20,6 @@ struct TestCase {
 #[tokio::main]
 async fn main() {
     // 1. Initialize Prover Client
-    // We use CPU prover client by default (local mock/proving).
-    // In production, SP1_PROVER env variable determines if it uses network proving or local GPU.
     let client = ProverClient::from_env().await;
     let pk = client.setup(ELF).await.unwrap();
     let vk = pk.verifying_key();
@@ -28,10 +27,21 @@ async fn main() {
     println!("SP1 Client Setup completed successfully.");
     println!("Model Image ID / Program VKey: {}", vk.bytes32());
 
-    // 2. Load test case from Python export
+    // 2. Load weights.bin dynamically
+    let weights_path = Path::new("model/weights/weights.bin");
+    if !weights_path.exists() {
+        println!("Error: model/weights/weights.bin not found. Run Python model training first.");
+        return;
+    }
+    let mut weights_file = File::open(weights_path).unwrap();
+    let mut weights_bytes = Vec::new();
+    weights_file.read_to_end(&mut weights_bytes).unwrap();
+    println!("Loaded weights.bin: {} bytes", weights_bytes.len());
+
+    // 3. Load test case from Python export
     let test_case_path = Path::new("model/weights/test_case.json");
     if !test_case_path.exists() {
-        println!("Error: model/weights/test_case.json not found. Run Python model training first.");
+        println!("Error: model/weights/test_case.json not found.");
         return;
     }
     
@@ -39,64 +49,81 @@ async fn main() {
     let test_case: TestCase = serde_json::from_reader(file).unwrap();
     
     println!("Loaded Test Case from Python:");
-    println!("  Prompt: {:?}", test_case.prompt);
-    println!("  Input Tokens: {:?}", test_case.input_idx);
+    println!("  Features: {:?}", test_case.features);
+    println!("  Scaled Features: {:?}", test_case.scaled_features);
     println!("  Expected Prediction: {} (token {})", test_case.pred_word, test_case.pred_token);
 
-    // 3. Set up ZKVM inputs
+    // 4. Set up ZKVM inputs
     let mut stdin = SP1Stdin::new();
-    let mut input_tokens = [0usize; 8];
-    for i in 0..8 {
-        if i < test_case.input_idx.len() {
-            input_tokens[i] = test_case.input_idx[i];
+    stdin.write_slice(&weights_bytes);
+    
+    let mut input_features = [0i32; 15];
+    for i in 0..15 {
+        if i < test_case.scaled_features.len() {
+            input_features[i] = test_case.scaled_features[i];
         }
     }
-    stdin.write(&input_tokens);
+    stdin.write(&input_features);
 
-    // 4. Simulate execution in the ZKVM (cheap & fast verification of logic)
+    // 5. Simulate execution in the ZKVM
     println!("Running ZKVM simulation...");
     let (mut public_values, execution_report) = client.execute(ELF, stdin.clone()).await.unwrap();
     println!("Simulation executed successfully!");
     println!("  Cycle count: {}", execution_report.total_instruction_count());
 
-    // Read outputs from public values
-    let output_input_tokens = public_values.read::<[usize; 8]>();
-    let output_pred_token = public_values.read::<usize>();
-
-    println!("ZKVM Outputs:");
-    println!("  Verified Input Tokens: {:?}", output_input_tokens);
-    println!("  Verified Predicted Token: {}", output_pred_token);
+    // Read the committed public values bytes
+    let public_values_bytes = public_values.as_slice();
+    println!("Committed Public Values Bytes: {} bytes", public_values_bytes.len());
     
-    let vocab_words = [
-        "<pad>", "<bos>", "<eos>", 
-        "MARKET", "BULL", "BEAR", "CRAB",
-        "VOLATILITY", "HIGH", "LOW",
-        "TREND", "UP", "DOWN",
-        "ACTION", "BUY_ETH", "BUY_USDC", "HOLD"
-    ];
-    let pred_word = if output_pred_token < vocab_words.len() {
-        vocab_words[output_pred_token]
+    // Decode the committed public values manually
+    // Types: (int256[15] features, uint256 actionToken, bytes32 weightsHash)
+    // Size: 544 bytes
+    if public_values_bytes.len() == 544 {
+        let mut decoded_features = [0i32; 15];
+        for i in 0..15 {
+            let offset = i * 32;
+            let chunk: [u8; 4] = public_values_bytes[offset + 28..offset + 32].try_into().unwrap();
+            decoded_features[i] = i32::from_be_bytes(chunk);
+        }
+        
+        let action_token_offset = 15 * 32;
+        let action_token_chunk: [u8; 4] = public_values_bytes[action_token_offset + 28..action_token_offset + 32].try_into().unwrap();
+        let action_token = u32::from_be_bytes(action_token_chunk);
+        
+        let weights_hash_offset = 16 * 32;
+        let mut weights_hash = [0u8; 32];
+        weights_hash.copy_from_slice(&public_values_bytes[weights_hash_offset..weights_hash_offset + 32]);
+        
+        println!("ZKVM Decoded Outputs:");
+        println!("  Decoded Features: {:?}", decoded_features);
+        println!("  Decoded Predicted Token: {}", action_token);
+        println!("  Decoded Weights Hash (hex): 0x{}", hex::encode(weights_hash));
+        
+        let mapping = |t: u32| match t {
+            14 => "BUY_ETH",
+            15 => "BUY_USDC",
+            16 => "HOLD",
+            _ => "UNKNOWN",
+        };
+        
+        println!("  Decoded Prediction: {}", mapping(action_token));
+        
+        if action_token as usize == test_case.pred_token {
+            println!("✅ Success: ZKVM output matches Python model prediction!");
+        } else {
+            println!("❌ Warning: ZKVM output ({}) differs from Python ({})", action_token, test_case.pred_token);
+        }
     } else {
-        "UNKNOWN"
-    };
-    println!("  Decoded Prediction: {} (token {})", pred_word, output_pred_token);
-
-    // Verify it matches expected output
-    if output_pred_token == test_case.pred_token {
-        println!("✅ Success: ZKVM output matches Python model prediction!");
-    } else {
-        println!("❌ Warning: ZKVM output ({}) differs from Python ({})", output_pred_token, test_case.pred_token);
+        println!("❌ Error: Public values bytes length is {}, expected 544", public_values_bytes.len());
     }
 
-    // 5. Generate Proof (if requested)
+    // 6. Generate Proof (if requested)
     let args: Vec<String> = std::env::args().collect();
     let prove_flag = args.contains(&"--prove".to_string());
-    let verifier_flag = args.contains(&"--generate-verifier".to_string());
 
     if prove_flag {
         println!("Generating Zero-Knowledge Proof (Groth16)... This may take a moment on CPU.");
         
-        // Generate EVM-compatible proof (Groth16 wrapper)
         let proof = client.prove(&pk, stdin).groth16().await.unwrap();
         println!("✅ Proof generated successfully!");
 
@@ -108,10 +135,5 @@ async fn main() {
         // Print hex representation of proof for contract testing
         let proof_bytes = proof.bytes();
         println!("Proof bytes (hex): 0x{}", hex::encode(proof_bytes));
-    }
-
-    if verifier_flag {
-        println!("Info: Standard Solidity Verifier contracts are pre-deployed by Succinct.");
-        println!("Please use the official @sp1-contracts package or deploy using 'forge install succinctlabs/sp1-contracts'.");
     }
 }

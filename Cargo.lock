@@ -5927,6 +5927,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "sp1-zkvm",
+ "tiny-keccak",
 ]
 
 [[package]]
