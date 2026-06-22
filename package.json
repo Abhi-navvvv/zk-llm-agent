@@ -9,5 +9,10 @@
     "dev:web": "pnpm --filter @zk-llm/web dev",
     "build:web": "pnpm --filter @zk-llm/web build",
     "start:web": "pnpm --filter @zk-llm/web start"
+  },
+  "devDependencies": {
+    "next": "16.2.7",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
   }
 }
