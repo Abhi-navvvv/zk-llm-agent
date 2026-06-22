@@ -548,10 +548,12 @@ header {
 @media (min-width: 1024px) {
   .terminal-wrapper {
     height: 100%;
+    min-height: 0;
   }
   .terminal-body {
-    height: auto;
+    height: 0;
     flex: 1;
+    min-height: 0;
   }
 }
 
