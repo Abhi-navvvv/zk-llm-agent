@@ -41,6 +41,11 @@ jobs:
     - name: Install Playwright Browsers
       run: pnpm --filter web exec playwright install --with-deps chromium
 
+    - name: Set up Protoc
+      uses: arduino/setup-protoc@v3
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Set up Rust
       uses: dtolnay/rust-toolchain@stable
 
