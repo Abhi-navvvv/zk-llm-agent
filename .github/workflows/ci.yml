@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Run Monorepo CI Suite
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Create Python Virtualenv
+      run: |
+        python -m venv venv
+        venv/bin/pip install numpy
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v3
+      with:
+        version: 9
+
+    - name: Install pnpm dependencies
+      run: pnpm install
+
+    - name: Install Playwright Browsers
+      run: pnpm --filter web exec playwright install --with-deps chromium
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Set up Foundry
+      uses: foundry-rs/foundry-toolchain@v1
+
+    - name: Train model and copy weights
+      run: make train
+
+    - name: Run CI Test Suite
+      run: make test-all

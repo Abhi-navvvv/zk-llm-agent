@@ -25,3 +25,14 @@ weights/
 # System / IDEs
 .DS_Store
 .vscode/
+
+# Solidity / Foundry
+contracts/out/
+contracts/cache/
+
+# Playwright E2E
+**/test-results/
+**/playwright-report/
+**/blob-report/
+**/.playwright/
+**/playwright/.cache/
