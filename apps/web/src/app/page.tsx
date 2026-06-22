@@ -53,7 +53,7 @@ export default function Home() {
   const [copiedId, setCopiedId] = useState("");
   
   const autoLoopRef = useRef<NodeJS.Timeout | null>(null);
-  const logsEndRef = useRef<HTMLDivElement | null>(null);
+  const terminalBodyRef = useRef<HTMLDivElement | null>(null);
 
   // Apply trend presets
   useEffect(() => {
@@ -104,10 +104,10 @@ export default function Home() {
     };
   }, [isAutonomous]);
 
-  // Scroll logs to bottom
+  // Scroll terminal-body container to bottom
   useEffect(() => {
-    if (logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    if (terminalBodyRef.current) {
+      terminalBodyRef.current.scrollTop = terminalBodyRef.current.scrollHeight;
     }
   }, [logs]);
 
@@ -377,9 +377,6 @@ export default function Home() {
       {/* Dashboard Grid */}
       <div className="dashboard-grid">
 
-        {/* Left Control Column */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
-
           {/* Inference Inputs Card */}
           <div className="glass-card">
             <div className="card-number">_01.</div>
@@ -460,6 +457,30 @@ export default function Home() {
             </button>
           </div>
 
+          {/* Terminal Console */}
+          <div className="terminal-wrapper">
+            <div className="terminal-header">
+              <div className="terminal-buttons">
+                <div className="terminal-btn close"></div>
+                <div className="terminal-btn minimize"></div>
+                <div className="terminal-btn expand"></div>
+              </div>
+              <div className="terminal-title">keeper-sh</div>
+            </div>
+
+            <div className="terminal-body" ref={terminalBodyRef}>
+              {logs.length === 0 ? (
+                <div className="terminal-line dim">&gt; keeper-sh: ready. Toggle Autonomous Mode or trigger manual decision. Features verify against activeWeightsHash on-chain.</div>
+              ) : (
+                logs.map((log, i) => (
+                  <div key={i} className={`terminal-line ${log.type}`}>
+                    <span className="terminal-line dim">[{log.time}]</span> {log.text}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
           {/* Vault Balance Overview */}
           <div className="glass-card">
             <div className="card-number">_02.</div>
@@ -495,36 +516,6 @@ export default function Home() {
                 <div className="visual-bar-fill-usdc" style={{ width: `${usdcPercent}%` }}></div>
                 <div className="visual-bar-fill-eth" style={{ width: `${ethPercent}%` }}></div>
               </div>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Right Console Output Column */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
-
-          {/* Terminal Console */}
-          <div className="terminal-wrapper">
-            <div className="terminal-header">
-              <div className="terminal-buttons">
-                <div className="terminal-btn close"></div>
-                <div className="terminal-btn minimize"></div>
-                <div className="terminal-btn expand"></div>
-              </div>
-              <div className="terminal-title">keeper-sh</div>
-            </div>
-
-            <div className="terminal-body">
-              {logs.length === 0 ? (
-                <div className="terminal-line dim">&gt; keeper-sh: ready. Toggle Autonomous Mode or trigger manual decision. Features verify against activeWeightsHash on-chain.</div>
-              ) : (
-                logs.map((log, i) => (
-                  <div key={i} className={`terminal-line ${log.type}`}>
-                    <span className="terminal-line dim">[{log.time}]</span> {log.text}
-                  </div>
-                ))
-              )}
-              <div ref={logsEndRef} />
             </div>
           </div>
 
@@ -585,7 +576,6 @@ export default function Home() {
             </div>
           </div>
 
-        </div>
       </div>
 
       {/* Marquee Ticker */}
