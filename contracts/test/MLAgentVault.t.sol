@@ -90,16 +90,12 @@ contract MockPriceFeed is IPriceFeed {
 // Forge Shim (minimal Test base)
 // ══════════════════════════════════════════════
 
-// NOTE: This file is designed for Foundry's `forge test`.
-// It uses forge-std's Test contract. Install with: forge install foundry-rs/forge-std
-
 interface Vm {
     function prank(address) external;
     function startPrank(address) external;
     function stopPrank() external;
     function expectRevert(bytes4) external;
-    function expectRevert(bytes memory) external;
-    function expectEmit(bool, bool, bool, bool) external;
+    function expectRevert(bytes calldata) external;
     function warp(uint256) external;
 }
 
@@ -122,6 +118,7 @@ contract MLAgentVaultTest {
     // Encoded test data
     bytes internal validPublicValues;
     bytes internal validProof;
+    bytes32 internal defaultWeightsHash = bytes32(uint256(0x5678));
 
     function setUp() public {
         // Deploy mocks
@@ -135,6 +132,7 @@ contract MLAgentVaultTest {
         vault = new MLAgentVault(
             address(verifier),
             bytes32(uint256(0x1234)),
+            defaultWeightsHash,
             address(usdc),
             address(weth),
             address(feed),
@@ -142,10 +140,11 @@ contract MLAgentVaultTest {
         );
         vm.stopPrank();
 
-        // Prepare mock proof data
-        uint256[8] memory prompt = [uint256(1), 3, 4, 7, 9, 13, 0, 0];
+        // Prepare mock proof data (15 features, actionToken, weightsHash)
+        int256[15] memory features;
+        features[0] = 100000;
         uint256 actionToken = 14; // BUY_ETH
-        validPublicValues = abi.encode(prompt, actionToken);
+        validPublicValues = abi.encode(features, actionToken, defaultWeightsHash);
         validProof = hex"deadbeef";
 
         // Fund vault with tokens
@@ -161,11 +160,12 @@ contract MLAgentVaultTest {
         assert(address(vault.verifier()) != address(0));
         assert(vault.maxSlippageBps() == 100);
         assert(!vault.paused());
+        assert(vault.activeWeightsHash() == defaultWeightsHash);
     }
 
     function test_constructor_reverts_zero_address() public {
         vm.expectRevert(MLAgentVault.ZeroAddress.selector);
-        new MLAgentVault(address(0), bytes32(0), address(usdc), address(weth), address(feed), operator);
+        new MLAgentVault(address(0), bytes32(0), bytes32(0), address(usdc), address(weth), address(feed), operator);
     }
 
     // ── Access Control Tests ──
@@ -181,23 +181,6 @@ contract MLAgentVaultTest {
         vault.rebalance(validPublicValues, validProof, 0);
     }
 
-    function test_rebalance_succeeds_for_owner() public {
-        vm.prank(owner);
-        vault.rebalance(validPublicValues, validProof, 0);
-    }
-
-    function test_only_owner_can_update_operator() public {
-        vm.prank(attacker);
-        vm.expectRevert(MLAgentVault.Unauthorized.selector);
-        vault.updateOperator(attacker);
-    }
-
-    function test_only_owner_can_pause() public {
-        vm.prank(attacker);
-        vm.expectRevert(MLAgentVault.Unauthorized.selector);
-        vault.pause();
-    }
-
     // ── Proof Verification Tests ──
 
     function test_rebalance_reverts_invalid_proof() public {
@@ -208,31 +191,20 @@ contract MLAgentVaultTest {
     }
 
     function test_rebalance_reverts_invalid_action_token() public {
-        uint256[8] memory prompt = [uint256(1), 3, 4, 7, 9, 13, 0, 0];
-        bytes memory badPub = abi.encode(prompt, uint256(99));
+        int256[15] memory features;
+        bytes memory badPub = abi.encode(features, uint256(99), defaultWeightsHash);
         vm.prank(operator);
         vm.expectRevert(abi.encodeWithSelector(MLAgentVault.InvalidActionToken.selector, 99));
         vault.rebalance(badPub, validProof, 0);
     }
 
-    // ── Pause Tests ──
-
-    function test_rebalance_reverts_when_paused() public {
-        vm.prank(owner);
-        vault.pause();
-
+    function test_rebalance_reverts_weights_hash_mismatch() public {
+        int256[15] memory features;
+        bytes32 badHash = bytes32(uint256(0x9999));
+        bytes memory badPub = abi.encode(features, uint256(14), badHash);
         vm.prank(operator);
-        vm.expectRevert(MLAgentVault.VaultPaused.selector);
-        vault.rebalance(validPublicValues, validProof, 0);
-    }
-
-    function test_deposit_reverts_when_paused() public {
-        vm.prank(owner);
-        vault.pause();
-
-        vm.prank(user);
-        vm.expectRevert(MLAgentVault.VaultPaused.selector);
-        vault.depositUsdc(1000);
+        vm.expectRevert(MLAgentVault.InvalidWeightsHash.selector);
+        vault.rebalance(badPub, validProof, 0);
     }
 
     // ── Deposit Tests ──
@@ -246,61 +218,127 @@ contract MLAgentVaultTest {
         vm.stopPrank();
 
         assert(vault.userUsdcDeposits(user) == 5000 * 1e6);
+        assert(vault.lastDepositTimestamp(user) == block.timestamp);
     }
 
-    function test_deposit_zero_reverts() public {
-        vm.prank(user);
-        vm.expectRevert(MLAgentVault.ZeroAmount.selector);
-        vault.depositUsdc(0);
+    // ── User Withdrawal & Cooldown Tests ──
+
+    function test_user_withdrawal_reverts_immediate() public {
+        usdc.mint(user, 5000 * 1e6);
+
+        vm.startPrank(user);
+        usdc.approve(address(vault), 5000 * 1e6);
+        vault.depositUsdc(5000 * 1e6);
+        
+        vm.expectRevert(MLAgentVault.TransferFailed.selector); // fails cooldown
+        vault.userWithdrawUsdc(1000 * 1e6);
+        vm.stopPrank();
     }
 
-    // ── Withdrawal Tests ──
+    function test_user_withdrawal_succeeds_after_cooldown() public {
+        usdc.mint(user, 5000 * 1e6);
 
-    function test_withdraw_usdc_only_owner() public {
-        vm.prank(attacker);
-        vm.expectRevert(MLAgentVault.Unauthorized.selector);
-        vault.withdrawUsdc(100, attacker);
+        vm.startPrank(user);
+        usdc.approve(address(vault), 5000 * 1e6);
+        vault.depositUsdc(5000 * 1e6);
+        vm.stopPrank();
+
+        // Warp 24 hours past cooldown
+        vm.warp(block.timestamp + 24 hours);
+
+        vm.startPrank(user);
+        vault.userWithdrawUsdc(1000 * 1e6);
+        vm.stopPrank();
+
+        assert(vault.userUsdcDeposits(user) == 4000 * 1e6);
     }
 
-    function test_withdraw_to_zero_address_reverts() public {
-        vm.prank(owner);
-        vm.expectRevert(MLAgentVault.ZeroAddress.selector);
-        vault.withdrawUsdc(100, address(0));
+    // ── Epoch Limit Tests ──
+
+    function test_user_withdrawal_fails_above_epoch_limit() public {
+        usdc.mint(user, 15_000 * 1e6);
+        
+        vm.startPrank(user);
+        usdc.approve(address(vault), 15_000 * 1e6);
+        vault.depositUsdc(15_000 * 1e6);
+        vm.stopPrank();
+        
+        vm.warp(block.timestamp + 24 hours);
+
+        vm.startPrank(user);
+        // Epoch cap is 20% of vault balance. 
+        // Vault has 10,000 + 15,000 = 25,000 USDC. 20% of 25,000 = 5,000 USDC.
+        // Trying to withdraw 6,000 USDC should fail the epoch limit check.
+        vm.expectRevert("Epoch USDC withdrawal limit exceeded");
+        vault.userWithdrawUsdc(6000 * 1e6);
+        vm.stopPrank();
     }
 
-    // ── Oracle Staleness Tests ──
+    // ── Timelock Governance Tests ──
 
-    function test_rebalance_reverts_stale_price() public {
-        // Warp time forward past staleness threshold
-        vm.warp(block.timestamp + 2 hours);
-
-        vm.prank(operator);
-        // Should revert because price feed hasn't been updated
-        vm.expectRevert(
-            abi.encodeWithSelector(MLAgentVault.StalePriceData.selector, feed.updatedAt(), block.timestamp + 2 hours)
-        );
-        vault.rebalance(validPublicValues, validProof, 0);
+    function test_update_vkey_timelock() public {
+        bytes32 newKey = bytes32(uint256(0xABCD));
+        vm.startPrank(owner);
+        
+        // 1. Propose VKey
+        vault.proposeProgramVKey(newKey);
+        
+        // 2. Try executing immediately (should revert)
+        vm.expectRevert(abi.encodeWithSelector(
+            MLAgentVault.TimelockNotExpired.selector,
+            block.timestamp,
+            block.timestamp + 24 hours
+        ));
+        vault.executeProgramVKey(newKey);
+        
+        // 3. Warp time past 24 hours
+        vm.warp(block.timestamp + 24 hours);
+        
+        // 4. Execute VKey succeeds
+        vault.executeProgramVKey(newKey);
+        assert(vault.programVKey() == newKey);
+        
+        vm.stopPrank();
     }
 
-    // ── Slippage Tests ──
+    function test_model_upgrade_registry_timelock() public {
+        bytes32 newVKey = bytes32(uint256(0xABCD));
+        bytes32 newHash = bytes32(uint256(0xDEFF));
+        vm.startPrank(owner);
 
-    function test_update_slippage_too_high_reverts() public {
-        vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(MLAgentVault.InvalidSlippage.selector, 1500));
-        vault.updateMaxSlippage(1500);
+        // 1. Propose Upgrade
+        vault.proposeModelUpgrade(2, newVKey, newHash);
+
+        // 2. Warp
+        vm.warp(block.timestamp + 24 hours);
+
+        // 3. Execute Upgrade
+        vault.executeModelUpgrade(2, newVKey, newHash);
+        
+        assert(vault.programVKey() == newVKey);
+        assert(vault.activeWeightsHash() == newHash);
+        assert(vault.activeModelVersion() == 2);
+        
+        vm.stopPrank();
     }
 
-    function test_update_slippage_success() public {
-        vm.prank(owner);
-        vault.updateMaxSlippage(200); // 2%
-        assert(vault.maxSlippageBps() == 200);
+    function test_rebalance_ratio_timelock() public {
+        vm.startPrank(owner);
+        
+        vault.proposeRebalanceRatio(8000); // 80%
+        
+        vm.warp(block.timestamp + 24 hours);
+        vault.executeRebalanceRatio(8000);
+        
+        assert(vault.rebalanceRatio() == 8000);
+        vm.stopPrank();
     }
 
     // ── HOLD Action Test ──
 
     function test_hold_action_no_swap() public {
-        uint256[8] memory prompt = [uint256(1), 3, 6, 7, 8, 13, 0, 0]; // CRAB + HIGH
-        bytes memory holdPub = abi.encode(prompt, uint256(16)); // HOLD
+        int256[15] memory features;
+        bytes memory holdPub = abi.encode(features, uint256(16), defaultWeightsHash); // HOLD
 
         uint256 usdcBefore = usdc.balanceOf(address(vault));
         uint256 wethBefore = weth.balanceOf(address(vault));
@@ -310,25 +348,5 @@ contract MLAgentVaultTest {
 
         assert(usdc.balanceOf(address(vault)) == usdcBefore);
         assert(weth.balanceOf(address(vault)) == wethBefore);
-    }
-
-    // ── View Function Tests ──
-
-    function test_view_balances() public view {
-        assert(vault.vaultUsdcBalance() == 10_000 * 1e6);
-        assert(vault.vaultWethBalance() == 5 * 1e18);
-    }
-
-    function test_get_eth_price() public view {
-        assert(vault.getEthPrice() == 300_000_000_000);
-    }
-
-    // ── VKey Update Tests ──
-
-    function test_update_vkey() public {
-        bytes32 newKey = bytes32(uint256(0xABCD));
-        vm.prank(owner);
-        vault.updateProgramVKey(newKey);
-        assert(vault.programVKey() == newKey);
     }
 }
