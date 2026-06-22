@@ -1,93 +1,78 @@
 #![no_main]
 sp1_zkvm::entrypoint!(main);
 
-// Configuration matching Python model.py
-const VOCAB_SIZE: usize = 17;
-const EMBED_DIM: usize = 8;
+use tiny_keccak::{Hasher, Keccak};
+
+const INPUT_DIM: usize = 15;
 const HIDDEN_DIM: usize = 16;
 const NUM_CLASSES: usize = 3;
-const MAX_LEN: usize = 8;
-
-const CLASS_TOKENS: [usize; 3] = [14, 15, 16];
-
-// The weights.bin file is baked directly into the guest binary!
-// This binds the compiled program's Image ID mathematically to this exact model.
-const WEIGHTS_BYTES: &[u8] = include_bytes!("weights.bin");
 
 pub fn main() {
-    // 1. Read input tokens from host (expected array of size MAX_LEN)
-    let input_idx = sp1_zkvm::io::read::<[usize; MAX_LEN]>();
+    // 1. Read dynamic weights from host
+    let weights_bytes = sp1_zkvm::io::read_vec();
     
-    // 2. Parse weights from bytes
+    // 2. Compute Keccak-256 hash of the model weights
+    let mut hasher = Keccak::v256();
+    hasher.update(&weights_bytes);
+    let mut weights_hash = [0u8; 32];
+    hasher.finalize(&mut weights_hash);
+    
+    // 3. Parse weights from the byte array
     let mut offset = 0;
     
-    // W_emb: [VOCAB_SIZE, EMBED_DIM]
-    let mut w_emb = [[0.0f32; EMBED_DIM]; VOCAB_SIZE];
-    for i in 0..VOCAB_SIZE {
-        for j in 0..EMBED_DIM {
-            let chunk: [u8; 4] = WEIGHTS_BYTES[offset..offset+4].try_into().unwrap();
-            w_emb[i][j] = f32::from_le_bytes(chunk);
-            offset += 4;
-        }
-    }
-    
-    // W1: [EMBED_DIM, HIDDEN_DIM]
-    let mut w1 = [[0.0f32; HIDDEN_DIM]; EMBED_DIM];
-    for i in 0..EMBED_DIM {
+    // W1: [15, 16]
+    let mut w1 = [[0.0f32; HIDDEN_DIM]; INPUT_DIM];
+    for i in 0..INPUT_DIM {
         for j in 0..HIDDEN_DIM {
-            let chunk: [u8; 4] = WEIGHTS_BYTES[offset..offset+4].try_into().unwrap();
+            let chunk: [u8; 4] = weights_bytes[offset..offset+4].try_into().unwrap();
             w1[i][j] = f32::from_le_bytes(chunk);
             offset += 4;
         }
     }
     
-    // b1: [HIDDEN_DIM]
+    // b1: [16]
     let mut b1 = [0.0f32; HIDDEN_DIM];
-    for i in 0..HIDDEN_DIM {
-        let chunk: [u8; 4] = WEIGHTS_BYTES[offset..offset+4].try_into().unwrap();
-        b1[i] = f32::from_le_bytes(chunk);
+    for j in 0..HIDDEN_DIM {
+        let chunk: [u8; 4] = weights_bytes[offset..offset+4].try_into().unwrap();
+        b1[j] = f32::from_le_bytes(chunk);
         offset += 4;
     }
     
-    // W2: [HIDDEN_DIM, NUM_CLASSES]
+    // W2: [16, 3]
     let mut w2 = [[0.0f32; NUM_CLASSES]; HIDDEN_DIM];
     for i in 0..HIDDEN_DIM {
         for j in 0..NUM_CLASSES {
-            let chunk: [u8; 4] = WEIGHTS_BYTES[offset..offset+4].try_into().unwrap();
+            let chunk: [u8; 4] = weights_bytes[offset..offset+4].try_into().unwrap();
             w2[i][j] = f32::from_le_bytes(chunk);
             offset += 4;
         }
     }
     
-    // b2: [NUM_CLASSES]
+    // b2: [3]
     let mut b2 = [0.0f32; NUM_CLASSES];
-    for i in 0..NUM_CLASSES {
-        let chunk: [u8; 4] = WEIGHTS_BYTES[offset..offset+4].try_into().unwrap();
-        b2[i] = f32::from_le_bytes(chunk);
+    for j in 0..NUM_CLASSES {
+        let chunk: [u8; 4] = weights_bytes[offset..offset+4].try_into().unwrap();
+        b2[j] = f32::from_le_bytes(chunk);
         offset += 4;
     }
     
-    // 3. Forward Pass
+    // 4. Read features from host (fixed-point i32, scaled by 1e6)
+    let input_features_scaled = sp1_zkvm::io::read::<[i32; INPUT_DIM]>();
     
-    // Embedding lookup & Mean pooling
-    // h: [EMBED_DIM]
-    let mut h = [0.0f32; EMBED_DIM];
-    for t in 0..MAX_LEN {
-        let token = input_idx[t];
-        for d in 0..EMBED_DIM {
-            h[d] += w_emb[token][d];
-        }
-    }
-    for d in 0..EMBED_DIM {
-        h[d] /= MAX_LEN as f32;
+    // Convert to f32
+    let mut features = [0.0f32; INPUT_DIM];
+    for i in 0..INPUT_DIM {
+        features[i] = input_features_scaled[i] as f32 / 1_000_000.0;
     }
     
-    // Linear 1: z1 = h * W1 + b1
+    // 5. Forward Pass
+    
+    // Linear 1: z1 = X * W1 + b1
     let mut z1 = [0.0f32; HIDDEN_DIM];
     for j in 0..HIDDEN_DIM {
         let mut sum = 0.0f32;
-        for i in 0..EMBED_DIM {
-            sum += h[i] * w1[i][j];
+        for i in 0..INPUT_DIM {
+            sum += features[i] * w1[i][j];
         }
         z1[j] = sum + b1[j];
     }
@@ -119,8 +104,6 @@ pub fn main() {
     let mut sum_exp = 0.0f32;
     let mut exp_z2 = [0.0f32; NUM_CLASSES];
     for j in 0..NUM_CLASSES {
-        // Simple exp approximation or standard float exp (since we are in guest std)
-        // Guest targets support standard f32::exp
         exp_z2[j] = (z2[j] - max_z2).exp();
         sum_exp += exp_z2[j];
     }
@@ -130,7 +113,7 @@ pub fn main() {
         probs[j] = exp_z2[j] / sum_exp;
     }
     
-    // Argmax to find predicted class index (0, 1, or 2)
+    // Argmax
     let mut pred_class = 0;
     let mut max_prob = probs[0];
     for j in 1..NUM_CLASSES {
@@ -140,12 +123,44 @@ pub fn main() {
         }
     }
     
-    let pred_token = CLASS_TOKENS[pred_class];
+    // Map class to action token: 0 -> 14 (BUY_ETH), 1 -> 15 (BUY_USDC), 2 -> 16 (HOLD)
+    let pred_token = match pred_class {
+        0 => 14,
+        1 => 15,
+        _ => 16,
+    };
     
-    // 4. Commit results to public IO
-    // We commit:
-    // - The input tokens (so the smart contract can verify what prompt was used)
-    // - The predicted output token (e.g., BUY_ETH / BUY_USDC / HOLD)
-    sp1_zkvm::io::commit(&input_idx);
-    sp1_zkvm::io::commit(&pred_token);
+    // 6. EVM ABI Encode public values
+    // Types: (int256[15] features, uint256 actionToken, bytes32 weightsHash)
+    // Size: 17 * 32 = 544 bytes
+    let abi_bytes = abi_encode(&input_features_scaled, pred_token, &weights_hash);
+    
+    // Commit output
+    sp1_zkvm::io::commit_slice(&abi_bytes);
+}
+
+/// Helper to EVM-ABI encode (int256[15] features, uint256 actionToken, bytes32 weightsHash)
+fn abi_encode(features: &[i32; INPUT_DIM], action_token: u32, weights_hash: &[u8; 32]) -> [u8; 544] {
+    let mut bytes = [0u8; 544];
+    
+    // Encode 15 features (each takes a 32-byte slot, big-endian signed two's complement)
+    for i in 0..INPUT_DIM {
+        let val = features[i] as i64;
+        bytes[i * 32 + 24..(i + 1) * 32].copy_from_slice(&val.to_be_bytes());
+        if val < 0 {
+            // Sign extension for two's complement
+            for b in 0..24 {
+                bytes[i * 32 + b] = 0xff;
+            }
+        }
+    }
+    
+    // Encode action_token (offset 15 * 32, takes 32-byte slot)
+    let action_val = action_token as u64;
+    bytes[15 * 32 + 24..16 * 32].copy_from_slice(&action_val.to_be_bytes());
+    
+    // Encode weights_hash (offset 16 * 32, takes 32-byte slot)
+    bytes[16 * 32..17 * 32].copy_from_slice(weights_hash);
+    
+    bytes
 }
