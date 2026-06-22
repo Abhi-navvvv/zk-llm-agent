@@ -17,10 +17,11 @@ __pycache__/
 *.pyc
 venv/
 .venv/
-weights/
 *.safetensors
-*.bin
 *.onnx
+
+# Allow model weights to be committed (needed for Vercel deployment)
+!model/weights/
 
 # System / IDEs
 .DS_Store

@@ -1,5 +1,5 @@
 {
-  "buildCommand": "pnpm --filter web build",
+  "buildCommand": "node scripts/copy-weights.js && pnpm --filter web build",
   "outputDirectory": "apps/web/.next",
   "framework": "nextjs"
 }
