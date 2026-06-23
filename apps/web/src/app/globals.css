@@ -264,7 +264,7 @@ header {
 
 @media (min-width: 1024px) {
   .dashboard-grid {
-    grid-template-columns: 1fr 1.3fr;
+    grid-template-columns: 1fr 1fr;
   }
 }
 
@@ -484,7 +484,6 @@ header {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  height: 380px;
 }
 
 .terminal-header {
