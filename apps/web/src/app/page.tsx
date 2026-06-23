@@ -1,6 +1,39 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useAccount, useReadContract, useWriteContract, useSimulateContract } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { formatUnits, parseUnits } from "viem";
+
+// ── Deployed Contract Addresses (Sepolia) ──
+const USDC_ADDRESS = (process.env.NEXT_PUBLIC_USDC_ADDRESS || "0x694396ce69C9b4A481d9BeC383f0690C3eAB9Bd1") as `0x${string}`;
+const WETH_ADDRESS = (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0x1C2AaD970D2CC65D88bfce33A70072FE64E604CF") as `0x${string}`;
+const VAULT_ADDRESS = (process.env.NEXT_PUBLIC_VAULT_ADDRESS || "0x2f7eC068039995D4ec21b36bFa421ac2674937BB") as `0x${string}`;
+
+// ── Minimal ERC20 ABI ──
+const erc20Abi = [
+  { type: "function", name: "balanceOf", inputs: [{ type: "address", name: "owner" }], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "approve", inputs: [{ type: "address", name: "spender" }, { type: "uint256", name: "amount" }], outputs: [{ type: "bool" }], stateMutability: "nonpayable" },
+  { type: "function", name: "allowance", inputs: [{ type: "address", name: "owner" }, { type: "address", name: "spender" }], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "decimals", inputs: [], outputs: [{ type: "uint8" }], stateMutability: "view" },
+] as const;
+
+// ── Minimal MLAgentVault ABI ──
+const vaultAbi = [
+  { type: "function", name: "depositUsdc", inputs: [{ type: "uint256", name: "amount" }], outputs: [], stateMutability: "nonpayable" },
+  { type: "function", name: "depositWeth", inputs: [{ type: "uint256", name: "amount" }], outputs: [], stateMutability: "nonpayable" },
+  { type: "function", name: "userWithdrawUsdc", inputs: [{ type: "uint256", name: "amount" }], outputs: [], stateMutability: "nonpayable" },
+  { type: "function", name: "userWithdrawWeth", inputs: [{ type: "uint256", name: "amount" }], outputs: [], stateMutability: "nonpayable" },
+  { type: "function", name: "rebalance", inputs: [{ type: "bytes", name: "publicValues" }, { type: "bytes", name: "proofBytes" }, { type: "uint256", name: "minAmountOut" }], outputs: [], stateMutability: "nonpayable" },
+  { type: "function", name: "vaultUsdcBalance", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "vaultWethBalance", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "operator", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "paused", inputs: [], outputs: [{ type: "bool" }], stateMutability: "view" },
+  { type: "function", name: "programVKey", inputs: [], outputs: [{ type: "bytes32" }], stateMutability: "view" },
+  { type: "function", name: "activeWeightsHash", inputs: [], outputs: [{ type: "bytes32" }], stateMutability: "view" },
+  { type: "function", name: "usdc", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "weth", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+] as const;
 
 // 15 Continuous DeFi Features Meta
 const FEATURES_META = [
@@ -21,8 +54,8 @@ const FEATURES_META = [
   { name: "active_addresses_change", label: "Active Addresses Change", min: -1.0, max: 1.0, default: 0.0 },
 ];
 
-const PROGRAM_VKEY = "0x00fa32d18408f62f32194b150ce10b9a8a926127bc0f7ea80238c92aef10e74f";
-const CONTRACT_WEIGHTS_HASH = "0x4fe6ba292850ff5109f3de21a10ab9a8a926127bc0f7ea80238c92aef10e74f";
+const PROGRAM_VKEY = "0x0068453615d1a0e97aa7f7c0900a1f0e0750faa076cce92ee58f1064e7a4aa00";
+const CONTRACT_WEIGHTS_HASH = "0xfe4c2e47d1821e7d9c4d91c846fc1ac7d1ee0f04cbbf434a7366b998e54cb108";
 
 interface LogLine {
   text: string;
@@ -47,6 +80,11 @@ export default function Home() {
   const [ethBalance, setEthBalance] = useState(1.6667);
   const [lastAction, setLastAction] = useState("NONE");
 
+  // Deposit / Withdraw form state
+  const [depositAmount, setDepositAmount] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [txHash, setTxHash] = useState("");
+
   // ZK Proof State
   const [proofBytes, setProofBytes] = useState("");
   const [publicValues, setPublicValues] = useState("");
@@ -55,7 +93,43 @@ export default function Home() {
   const autoLoopRef = useRef<NodeJS.Timeout | null>(null);
   const terminalBodyRef = useRef<HTMLDivElement | null>(null);
 
-  // Apply trend presets
+  // ── Wagmi hooks ──
+  const { address, isConnected } = useAccount();
+  const { writeContractAsync } = useWriteContract();
+
+  // Read USDC decimals
+  const { data: usdcDecimals } = useReadContract({ abi: erc20Abi, address: USDC_ADDRESS, functionName: "decimals" });
+  const { data: wethDecimals } = useReadContract({ abi: erc20Abi, address: WETH_ADDRESS, functionName: "decimals" });
+
+  // Read user's token balances
+  const { data: userUsdcBalance, refetch: refetchUserUsdc } = useReadContract({
+    abi: erc20Abi, address: USDC_ADDRESS, functionName: "balanceOf", args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
+  const { data: userWethBalance, refetch: refetchUserWeth } = useReadContract({
+    abi: erc20Abi, address: WETH_ADDRESS, functionName: "balanceOf", args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
+
+  // Read vault token balances
+  const { data: vaultUsdcRaw, refetch: refetchVaultUsdc } = useReadContract({
+    abi: vaultAbi, address: VAULT_ADDRESS, functionName: "vaultUsdcBalance",
+  });
+  const { data: vaultWethRaw, refetch: refetchVaultWeth } = useReadContract({
+    abi: vaultAbi, address: VAULT_ADDRESS, functionName: "vaultWethBalance",
+  });
+
+  // Read vault operator
+  const { data: vaultOperator } = useReadContract({
+    abi: vaultAbi, address: VAULT_ADDRESS, functionName: "operator",
+  });
+
+  // Read vault paused
+  const { data: vaultPaused } = useReadContract({
+    abi: vaultAbi, address: VAULT_ADDRESS, functionName: "paused",
+  });
+
+  // ── Apply trend presets ──
   useEffect(() => {
     if (isAutonomous) return; // ignore preset selections when autonomous loop is driving
 
@@ -219,39 +293,70 @@ export default function Home() {
     appendLog("SP1 VM executes guest program: reads inputs, verifies weights Keccak hash...", "dim");
     await sleep(1000);
 
+    // ABI-encode public values: (int256[15] features, uint256 actionToken, bytes32 weightsHash)
+    const weightsHashBytes = CONTRACT_WEIGHTS_HASH.startsWith("0x")
+      ? CONTRACT_WEIGHTS_HASH.slice(2)
+      : CONTRACT_WEIGHTS_HASH;
+    const abiEncoded = "0x"
+      + currentFeatures.map(f => {
+        const hex = (f * 1e6 >= 0 ? (f * 1e6).toString(16) : (0x100000000000000000000000000000000 + f * 1e6).toString(16));
+        return hex.padStart(64, "0");
+      }).join("")
+      + predToken.toString(16).padStart(64, "0")
+      + weightsHashBytes.padStart(64, "0");
+
     const mockProof = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-    // EVM public values contains ABI encoding
-    const mockPublicValues = "0x" + Array.from({ length: 96 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
 
     setProofBytes(mockProof);
-    setPublicValues(mockPublicValues);
+    setPublicValues(abiEncoded);
 
     appendLog("✅ ZK Proof generated successfully!", "success");
     appendLog(`  Verification Key: ${PROGRAM_VKEY}`, "dim");
     appendLog(`  Committed Weights Hash matches active: ${CONTRACT_WEIGHTS_HASH}`, "dim");
     await sleep(600);
 
-    // 4. Contract Execution (SIMULATED)
+    // 4. Contract Execution — attempt on-chain, fall back to simulation
     setStatus("contract");
     appendLog("Submitting proof & public values to MLAgentVault.sol...", "info");
     await sleep(600);
-    appendLog("  MLAgentVault.sol: verifyProof() -> PASS", "success");
-    appendLog("  MLAgentVault.sol: activeWeightsHash verified -> PASS", "success");
+
+    let chainSuccess = false;
+    if (address && isConnected) {
+      try {
+        const hash = await writeContractAsync({
+          abi: vaultAbi,
+          address: VAULT_ADDRESS,
+          functionName: "rebalance",
+          args: [abiEncoded as `0x${string}`, mockProof as `0x${string}`, BigInt(0)],
+        });
+        setTxHash(hash);
+        appendLog(`  rebalance() tx: ${hash.slice(0, 10)}...`, "success");
+        chainSuccess = true;
+        refetchVaultUsdc();
+        refetchVaultWeth();
+      } catch (e: any) {
+        appendLog(`  rebalance() reverted (expected — mock proof won't pass SP1 verifier): ${e?.message?.slice(0, 60)}`, "warn");
+      }
+    }
+
+    if (!chainSuccess) {
+      appendLog("  Simulated: verifyProof() -> PASS", "success");
+      appendLog("  Simulated: activeWeightsHash verified -> PASS", "success");
+    }
     await sleep(400);
 
-    // Perform swaps in local state
     if (predictedAction === "BUY_ETH") {
-      const usdcToSwap = usdcBalance * 0.5;
+      const usdcToSwap = vaultUsdc * 0.5;
       setUsdcBalance(prev => prev - usdcToSwap);
       setEthBalance(prev => prev + (usdcToSwap / 3000));
-      appendLog(`[REBALANCE] Swapped ${usdcToSwap.toFixed(2)} USDC for ${(usdcToSwap / 3000).toFixed(4)} WETH`, "success");
+      appendLog(`  [REBALANCE] Swapped ${usdcToSwap.toFixed(2)} USDC for ${(usdcToSwap / 3000).toFixed(4)} WETH`, "success");
     } else if (predictedAction === "BUY_USDC") {
-      const ethToSwap = ethBalance * 0.5;
+      const ethToSwap = vaultWeth * 0.5;
       setEthBalance(prev => prev - ethToSwap);
       setUsdcBalance(prev => prev + (ethToSwap * 3000));
-      appendLog(`[REBALANCE] Swapped ${ethToSwap.toFixed(4)} WETH for ${(ethToSwap * 3000).toFixed(2)} USDC`, "success");
+      appendLog(`  [REBALANCE] Swapped ${ethToSwap.toFixed(4)} WETH for ${(ethToSwap * 3000).toFixed(2)} USDC`, "success");
     } else {
-      appendLog(`[HOLD] Keep assets unchanged.`, "info");
+      appendLog(`  [HOLD] Keep assets unchanged.`, "info");
     }
 
     setLastAction(predictedAction);
@@ -267,10 +372,71 @@ export default function Home() {
     setFeatures(updated);
   };
 
+  // ── Deposit / Withdraw handlers ──
+  const handleDeposit = async (token: "usdc" | "weth") => {
+    if (!address || !depositAmount) return;
+    const decimals = token === "usdc" ? (usdcDecimals ?? 6) : (wethDecimals ?? 18);
+    const amount = parseUnits(depositAmount, decimals);
+    const fn = token === "usdc" ? "depositUsdc" : "depositWeth";
+
+    appendLog(`Depositing ${depositAmount} ${token.toUpperCase()}...`, "info");
+    try {
+      const hash = await writeContractAsync({ abi: vaultAbi, address: VAULT_ADDRESS, functionName: fn, args: [amount] });
+      setTxHash(hash);
+      appendLog(`${token.toUpperCase()} deposit tx: ${hash.slice(0, 10)}...`, "success");
+      refetchVaultUsdc();
+      refetchVaultWeth();
+      refetchUserUsdc();
+      refetchUserWeth();
+      setDepositAmount("");
+    } catch (e: any) {
+      appendLog(`Deposit failed: ${e?.message?.slice(0, 80) || "unknown error"}`, "err");
+    }
+  };
+
+  const handleWithdraw = async (token: "usdc" | "weth") => {
+    if (!address || !withdrawAmount) return;
+    const decimals = token === "usdc" ? (usdcDecimals ?? 6) : (wethDecimals ?? 18);
+    const amount = parseUnits(withdrawAmount, decimals);
+    const fn = token === "usdc" ? "userWithdrawUsdc" : "userWithdrawWeth";
+
+    appendLog(`Withdrawing ${withdrawAmount} ${token.toUpperCase()}...`, "info");
+    try {
+      const hash = await writeContractAsync({ abi: vaultAbi, address: VAULT_ADDRESS, functionName: fn, args: [amount] });
+      setTxHash(hash);
+      appendLog(`${token.toUpperCase()} withdraw tx: ${hash.slice(0, 10)}...`, "success");
+      refetchVaultUsdc();
+      refetchVaultWeth();
+      refetchUserUsdc();
+      refetchUserWeth();
+      setWithdrawAmount("");
+    } catch (e: any) {
+      appendLog(`Withdraw failed: ${e?.message?.slice(0, 80) || "unknown error"}`, "err");
+    }
+  };
+
+  const handleApprove = async (token: "usdc" | "weth") => {
+    if (!address || !depositAmount) return;
+    const decimals = token === "usdc" ? (usdcDecimals ?? 6) : (wethDecimals ?? 18);
+    const amount = parseUnits(depositAmount, decimals);
+    const tokenAddr = token === "usdc" ? USDC_ADDRESS : WETH_ADDRESS;
+
+    appendLog(`Approving vault for ${depositAmount} ${token.toUpperCase()}...`, "info");
+    try {
+      const hash = await writeContractAsync({ abi: erc20Abi, address: tokenAddr, functionName: "approve", args: [VAULT_ADDRESS, amount] });
+      setTxHash(hash);
+      appendLog(`Approval tx: ${hash.slice(0, 10)}...`, "success");
+    } catch (e: any) {
+      appendLog(`Approval failed: ${e?.message?.slice(0, 80) || "unknown error"}`, "err");
+    }
+  };
+
+  const vaultUsdc = vaultUsdcRaw ? Number(formatUnits(vaultUsdcRaw, 6)) : 0;
+  const vaultWeth = vaultWethRaw ? Number(formatUnits(vaultWethRaw, 18)) : 0;
+  const userUsdc = userUsdcBalance ? Number(formatUnits(userUsdcBalance, 6)) : 0;
+  const userWeth = userWethBalance ? Number(formatUnits(userWethBalance, 18)) : 0;
+
   const ethPrice = 3000;
-  const totalValue = usdcBalance + (ethBalance * ethPrice);
-  const usdcPercent = totalValue > 0 ? (usdcBalance / totalValue) * 100 : 100;
-  const ethPercent = 100 - usdcPercent;
 
   const getStepClass = (step: number) => {
     if (status === "success") return "completed";
@@ -338,10 +504,7 @@ export default function Home() {
             </label>
           </div>
 
-          <button className="wallet-btn">
-            <div className="dot"></div>
-            Connected: 0xab...f53c
-          </button>
+          <ConnectButton chainStatus="icon" showBalance={true} />
         </div>
       </header>
 
@@ -481,7 +644,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Vault Balance Overview */}
+        {/* Vault Balance Overview + Deposit / Withdraw */}
         <div className="glass-card">
           <div className="card-number">_02.</div>
           <h3 className="card-title">
@@ -493,30 +656,87 @@ export default function Home() {
 
           <div className="balance-list">
             <div className="balance-item">
-              <span className="balance-name">USDC Balance</span>
-              <span className="balance-val">${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span className="balance-name">Vault USDC</span>
+              <span className="balance-val">${vaultUsdc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="balance-item">
-              <span className="balance-name">ETH Balance</span>
-              <span className="balance-val">{ethBalance.toFixed(4)} ETH</span>
+              <span className="balance-name">Vault WETH</span>
+              <span className="balance-val">{vaultWeth.toFixed(4)} WETH</span>
             </div>
+            {isConnected && (
+              <>
+                <div className="balance-item" style={{ borderTop: "1px dashed rgba(255,255,255,0.08)", paddingTop: "1rem", marginTop: "0.5rem" }}>
+                  <span className="balance-name">Your USDC</span>
+                  <span className="balance-val">${userUsdc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="balance-item">
+                  <span className="balance-name">Your WETH</span>
+                  <span className="balance-val">{userWeth.toFixed(4)} WETH</span>
+                </div>
+              </>
+            )}
             <div className="balance-item" style={{ borderTop: "1px dashed rgba(255,255,255,0.08)", paddingTop: "1rem", marginTop: "0.5rem" }}>
               <span className="balance-name" style={{ fontWeight: "bold", color: "#ffffff" }}>Total Asset Value</span>
-              <span className="balance-val" style={{ color: "var(--mint)", fontSize: "1.1rem" }}>${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span className="balance-val" style={{ color: "var(--mint)", fontSize: "1.1rem" }}>${(vaultUsdc + vaultWeth * ethPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
 
           {/* Asset Allocation Bar Chart */}
-          <div className="visual-bar-container">
-            <div className="visual-bar-labels">
-              <span>USDC: {usdcPercent.toFixed(0)}%</span>
-              <span>ETH: {ethPercent.toFixed(0)}%</span>
+          {(vaultUsdc > 0 || vaultWeth > 0) && (
+            <div className="visual-bar-container">
+              <div className="visual-bar-labels">
+                <span>USDC: {((vaultUsdc / (vaultUsdc + vaultWeth * ethPrice)) * 100).toFixed(0)}%</span>
+                <span>ETH: {((vaultWeth * ethPrice / (vaultUsdc + vaultWeth * ethPrice)) * 100).toFixed(0)}%</span>
+              </div>
+              <div className="visual-bar">
+                <div className="visual-bar-fill-usdc" style={{ width: `${vaultUsdc > 0 ? (vaultUsdc / (vaultUsdc + vaultWeth * ethPrice)) * 100 : 0}%` }}></div>
+                <div className="visual-bar-fill-eth" style={{ width: `${vaultWeth > 0 ? (vaultWeth * ethPrice / (vaultUsdc + vaultWeth * ethPrice)) * 100 : 0}%` }}></div>
+              </div>
             </div>
-            <div className="visual-bar">
-              <div className="visual-bar-fill-usdc" style={{ width: `${usdcPercent}%` }}></div>
-              <div className="visual-bar-fill-eth" style={{ width: `${ethPercent}%` }}></div>
+          )}
+
+          {/* Deposit / Withdraw Forms */}
+          {isConnected && (
+            <div style={{ marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+              {/* Deposit */}
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  type="text"
+                  placeholder="Amount to deposit"
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  style={{
+                    flex: 1, minWidth: "120px", background: "#0d0d0d", border: "1px solid rgba(255,255,255,0.08)",
+                    color: "#fafafa", padding: "0.6rem 1rem", borderRadius: "0.25rem", fontSize: "0.85rem", fontFamily: "var(--font-mono)"
+                  }}
+                />
+                <button className="wallet-btn" onClick={() => handleApprove("usdc")}>Approve USDC</button>
+                <button className="wallet-btn" onClick={() => handleDeposit("usdc")} style={{ borderColor: "var(--mint)", color: "var(--mint)" }}>Deposit USDC</button>
+                <button className="wallet-btn" onClick={() => handleApprove("weth")}>Approve WETH</button>
+                <button className="wallet-btn" onClick={() => handleDeposit("weth")} style={{ borderColor: "var(--mint)", color: "var(--mint)" }}>Deposit WETH</button>
+              </div>
+              {/* Withdraw */}
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  type="text"
+                  placeholder="Amount to withdraw"
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  style={{
+                    flex: 1, minWidth: "120px", background: "#0d0d0d", border: "1px solid rgba(255,255,255,0.08)",
+                    color: "#fafafa", padding: "0.6rem 1rem", borderRadius: "0.25rem", fontSize: "0.85rem", fontFamily: "var(--font-mono)"
+                  }}
+                />
+                <button className="wallet-btn" onClick={() => handleWithdraw("usdc")} style={{ borderColor: "#ef4444", color: "#ef4444" }}>Withdraw USDC</button>
+                <button className="wallet-btn" onClick={() => handleWithdraw("weth")} style={{ borderColor: "#ef4444", color: "#ef4444" }}>Withdraw WETH</button>
+              </div>
+              {txHash && (
+                <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", textAlign: "center" }}>
+                  Last tx: <a href={`https://sepolia.etherscan.io/tx/${txHash}`} target="_blank" rel="noreferrer" style={{ color: "var(--mint)" }}>{txHash.slice(0, 20)}...</a>
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
 
         {/* Cryptographic Proof Details */}
