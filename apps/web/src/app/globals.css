@@ -485,7 +485,6 @@ header {
   display: flex;
   flex-direction: column;
   height: 380px;
-  grid-column: 1 / -1;
 }
 
 .terminal-header {
