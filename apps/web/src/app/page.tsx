@@ -33,7 +33,7 @@ interface LogLine {
 export default function Home() {
   const [isAutonomous, setIsAutonomous] = useState(false);
   const [trendPreset, setTrendPreset] = useState("BULL");
-  
+
   // 15 continuous features
   const [features, setFeatures] = useState<number[]>(
     FEATURES_META.map(f => f.default)
@@ -51,7 +51,7 @@ export default function Home() {
   const [proofBytes, setProofBytes] = useState("");
   const [publicValues, setPublicValues] = useState("");
   const [copiedId, setCopiedId] = useState("");
-  
+
   const autoLoopRef = useRef<NodeJS.Timeout | null>(null);
   const terminalBodyRef = useRef<HTMLDivElement | null>(null);
 
@@ -85,7 +85,7 @@ export default function Home() {
       appendLog("🤖 Autonomous mode activated. Starting keeper loop...", "info");
       // Trigger immediately
       runAutonomousStep();
-      
+
       autoLoopRef.current = setInterval(() => {
         runAutonomousStep();
       }, 10000); // run every 10 seconds
@@ -140,7 +140,7 @@ export default function Home() {
 
   const runAutonomousStep = async () => {
     setStatus("running");
-    
+
     // 1. Simulate Oracle Drift
     setFeatures((prev) => {
       const drifted = driftFeatures(prev);
@@ -312,10 +312,10 @@ export default function Home() {
               {isAutonomous ? "Autonomous Mode ON" : "Autonomous Mode OFF"}
             </span>
             <label style={{ position: "relative", display: "inline-block", width: "36px", height: "20px", cursor: "pointer" }}>
-              <input 
-                type="checkbox" 
-                checked={isAutonomous} 
-                onChange={(e) => setIsAutonomous(e.target.checked)} 
+              <input
+                type="checkbox"
+                checked={isAutonomous}
+                onChange={(e) => setIsAutonomous(e.target.checked)}
                 style={{ opacity: 0, width: 0, height: 0 }}
               />
               <span style={{
@@ -333,7 +333,7 @@ export default function Home() {
                   backgroundColor: isAutonomous ? "#000" : "#888",
                   borderRadius: "50%",
                   transition: "0.3s"
-                }}/>
+                }} />
               </span>
             </label>
           </div>
@@ -377,204 +377,204 @@ export default function Home() {
       {/* Dashboard Grid */}
       <div className="dashboard-grid">
 
-          {/* Inference Inputs Card */}
-          <div className="glass-card">
-            <div className="card-number">_01.</div>
-            <h3 className="card-title">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-              </svg>
-              Inference Inputs
-            </h3>
+        {/* Inference Inputs Card */}
+        <div className="glass-card">
+          <div className="card-number">_01.</div>
+          <h3 className="card-title">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            </svg>
+            Inference Inputs
+          </h3>
 
-            {/* Presets dropdown (manual mode only) */}
-            <div className="input-group">
-              <label className="input-label">Quick Market Presets</label>
-              <select
-                className="select-input"
-                value={trendPreset}
-                onChange={(e) => setTrendPreset(e.target.value)}
-                disabled={isAutonomous || (status !== "idle" && status !== "success")}
-              >
-                <option value="BULL">BULL (Upward Momentum & Low Volatility)</option>
-                <option value="BEAR">BEAR (Downward Momentum & High Volatility)</option>
-                <option value="CRAB">CRAB (Flat Trend & Range Bound)</option>
-              </select>
-            </div>
-
-            {/* Scrollable features list */}
-            <div style={{ 
-              maxHeight: "340px", 
-              overflowY: "auto", 
-              paddingRight: "0.5rem", 
-              marginBottom: "1.5rem",
-              border: "1px solid rgba(255, 255, 255, 0.05)",
-              borderRadius: "0.25rem",
-              padding: "1rem",
-              background: "rgba(0,0,0,0.2)"
-            }}>
-              <span className="input-label" style={{ display: "block", marginBottom: "0.85rem" }}>
-                15 DeFi Oracle Feeds (Normalized -1.0 to 1.0)
-              </span>
-              
-              {FEATURES_META.map((meta, index) => (
-                <div key={meta.name} style={{ marginBottom: "1rem" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "#fafafa" }}>
-                    <span>{meta.label}</span>
-                    <span style={{ fontFamily: "var(--font-mono)", color: features[index] > 0 ? "var(--mint)" : features[index] < 0 ? "#ef4444" : "var(--text-muted)" }}>
-                      {features[index] >= 0 ? `+${features[index].toFixed(2)}` : features[index].toFixed(2)}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={meta.min}
-                    max={meta.max}
-                    step="0.05"
-                    value={features[index]}
-                    onChange={(e) => handleSliderChange(index, parseFloat(e.target.value))}
-                    disabled={isAutonomous || (status !== "idle" && status !== "success")}
-                    style={{
-                      width: "100%",
-                      accentColor: "var(--mint)",
-                      background: "rgba(255, 255, 255, 0.1)",
-                      cursor: isAutonomous ? "not-allowed" : "pointer"
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <button
-              className="action-btn"
-              onClick={handleRunInference}
+          {/* Presets dropdown (manual mode only) */}
+          <div className="input-group">
+            <label className="input-label">Quick Market Presets</label>
+            <select
+              className="select-input"
+              value={trendPreset}
+              onChange={(e) => setTrendPreset(e.target.value)}
               disabled={isAutonomous || (status !== "idle" && status !== "success")}
             >
-              {isAutonomous ? "Keeper Loop Active" : status === "idle" && "Trigger Decision"}
-              {!isAutonomous && status === "running" && "Executing Guest..."}
-              {!isAutonomous && status === "proving" && "Generating Proof..."}
-              {!isAutonomous && status === "contract" && "Verifying On-Chain..."}
-              {!isAutonomous && status === "success" && "Trigger New Decision"}
-            </button>
+              <option value="BULL">BULL (Upward Momentum & Low Volatility)</option>
+              <option value="BEAR">BEAR (Downward Momentum & High Volatility)</option>
+              <option value="CRAB">CRAB (Flat Trend & Range Bound)</option>
+            </select>
           </div>
 
-          {/* Terminal Console */}
-          <div className="terminal-wrapper">
-            <div className="terminal-header">
-              <div className="terminal-buttons">
-                <div className="terminal-btn close"></div>
-                <div className="terminal-btn minimize"></div>
-                <div className="terminal-btn expand"></div>
-              </div>
-              <div className="terminal-title">keeper-sh</div>
-            </div>
+          {/* Scrollable features list */}
+          <div style={{
+            maxHeight: "340px",
+            overflowY: "auto",
+            paddingRight: "0.5rem",
+            marginBottom: "1.5rem",
+            border: "1px solid rgba(255, 255, 255, 0.05)",
+            borderRadius: "0.25rem",
+            padding: "1rem",
+            background: "rgba(0,0,0,0.2)"
+          }}>
+            <span className="input-label" style={{ display: "block", marginBottom: "0.85rem" }}>
+              15 DeFi Oracle Feeds (Normalized -1.0 to 1.0)
+            </span>
 
-            <div className="terminal-body" ref={terminalBodyRef}>
-              {logs.length === 0 ? (
-                <div className="terminal-line dim">&gt; keeper-sh: ready. Toggle Autonomous Mode or trigger manual decision. Features verify against activeWeightsHash on-chain.</div>
-              ) : (
-                logs.map((log, i) => (
-                  <div key={i} className={`terminal-line ${log.type}`}>
-                    <span className="terminal-line dim">[{log.time}]</span> {log.text}
-                  </div>
-                ))
-              )}
+            {FEATURES_META.map((meta, index) => (
+              <div key={meta.name} style={{ marginBottom: "1rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "#fafafa" }}>
+                  <span>{meta.label}</span>
+                  <span style={{ fontFamily: "var(--font-mono)", color: features[index] > 0 ? "var(--mint)" : features[index] < 0 ? "#ef4444" : "var(--text-muted)" }}>
+                    {features[index] >= 0 ? `+${features[index].toFixed(2)}` : features[index].toFixed(2)}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={meta.min}
+                  max={meta.max}
+                  step="0.05"
+                  value={features[index]}
+                  onChange={(e) => handleSliderChange(index, parseFloat(e.target.value))}
+                  disabled={isAutonomous || (status !== "idle" && status !== "success")}
+                  style={{
+                    width: "100%",
+                    accentColor: "var(--mint)",
+                    background: "rgba(255, 255, 255, 0.1)",
+                    cursor: isAutonomous ? "not-allowed" : "pointer"
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+
+          <button
+            className="action-btn"
+            onClick={handleRunInference}
+            disabled={isAutonomous || (status !== "idle" && status !== "success")}
+          >
+            {isAutonomous ? "Keeper Loop Active" : status === "idle" && "Trigger Decision"}
+            {!isAutonomous && status === "running" && "Executing Guest..."}
+            {!isAutonomous && status === "proving" && "Generating Proof..."}
+            {!isAutonomous && status === "contract" && "Verifying On-Chain..."}
+            {!isAutonomous && status === "success" && "Trigger New Decision"}
+          </button>
+        </div>
+
+        {/* Terminal Console */}
+        <div className="terminal-wrapper">
+          <div className="terminal-header">
+            <div className="terminal-buttons">
+              <div className="terminal-btn close"></div>
+              <div className="terminal-btn minimize"></div>
+              <div className="terminal-btn expand"></div>
+            </div>
+            <div className="terminal-title">keeper-sh</div>
+          </div>
+
+          <div className="terminal-body" ref={terminalBodyRef}>
+            {logs.length === 0 ? (
+              <div className="terminal-line dim">&gt; keeper-sh: ready. Toggle Autonomous Mode or trigger manual decision. Features verify against activeWeightsHash on-chain.</div>
+            ) : (
+              logs.map((log, i) => (
+                <div key={i} className={`terminal-line ${log.type}`}>
+                  <span className="terminal-line dim">[{log.time}]</span> {log.text}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Vault Balance Overview */}
+        <div className="glass-card">
+          <div className="card-number">_02.</div>
+          <h3 className="card-title">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            MLAgentVault.sol
+          </h3>
+
+          <div className="balance-list">
+            <div className="balance-item">
+              <span className="balance-name">USDC Balance</span>
+              <span className="balance-val">${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            <div className="balance-item">
+              <span className="balance-name">ETH Balance</span>
+              <span className="balance-val">{ethBalance.toFixed(4)} ETH</span>
+            </div>
+            <div className="balance-item" style={{ borderTop: "1px dashed rgba(255,255,255,0.08)", paddingTop: "1rem", marginTop: "0.5rem" }}>
+              <span className="balance-name" style={{ fontWeight: "bold", color: "#ffffff" }}>Total Asset Value</span>
+              <span className="balance-val" style={{ color: "var(--mint)", fontSize: "1.1rem" }}>${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
 
-          {/* Vault Balance Overview */}
-          <div className="glass-card">
-            <div className="card-number">_02.</div>
-            <h3 className="card-title">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              MLAgentVault.sol
-            </h3>
+          {/* Asset Allocation Bar Chart */}
+          <div className="visual-bar-container">
+            <div className="visual-bar-labels">
+              <span>USDC: {usdcPercent.toFixed(0)}%</span>
+              <span>ETH: {ethPercent.toFixed(0)}%</span>
+            </div>
+            <div className="visual-bar">
+              <div className="visual-bar-fill-usdc" style={{ width: `${usdcPercent}%` }}></div>
+              <div className="visual-bar-fill-eth" style={{ width: `${ethPercent}%` }}></div>
+            </div>
+          </div>
+        </div>
 
-            <div className="balance-list">
-              <div className="balance-item">
-                <span className="balance-name">USDC Balance</span>
-                <span className="balance-val">${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        {/* Cryptographic Proof Details */}
+        <div className="glass-card">
+          <div className="card-number">_03.</div>
+          <h3 className="card-title">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            Cryptographic Proof Elements
+          </h3>
+
+          <div className="proof-container">
+            <div className="proof-item">
+              <div className="proof-header-row">
+                <div className="proof-label">Program Image ID (VKey)</div>
+                <button className="copy-btn" onClick={() => copyToClipboard(PROGRAM_VKEY, "vkey")}>
+                  {copiedId === "vkey" ? "Copied!" : "Copy"}
+                </button>
               </div>
-              <div className="balance-item">
-                <span className="balance-name">ETH Balance</span>
-                <span className="balance-val">{ethBalance.toFixed(4)} ETH</span>
+              <div className="proof-value-box">{PROGRAM_VKEY}</div>
+            </div>
+
+            <div className="proof-item">
+              <div className="proof-header-row">
+                <div className="proof-label">Registered Active Weights Hash</div>
+                <button className="copy-btn" onClick={() => copyToClipboard(CONTRACT_WEIGHTS_HASH, "weightshash")}>
+                  {copiedId === "weightshash" ? "Copied!" : "Copy"}
+                </button>
               </div>
-              <div className="balance-item" style={{ borderTop: "1px dashed rgba(255,255,255,0.08)", paddingTop: "1rem", marginTop: "0.5rem" }}>
-                <span className="balance-name" style={{ fontWeight: "bold", color: "#ffffff" }}>Total Asset Value</span>
-                <span className="balance-val" style={{ color: "var(--mint)", fontSize: "1.1rem" }}>${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <div className="proof-value-box">{CONTRACT_WEIGHTS_HASH}</div>
+            </div>
+
+            <div className="proof-item">
+              <div className="proof-header-row">
+                <div className="proof-label">Public Values Commitment (EVM ABI)</div>
+                <button className="copy-btn" onClick={() => copyToClipboard(publicValues, "pubval")} disabled={!publicValues}>
+                  {copiedId === "pubval" ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              <div className="proof-value-box">
+                {publicValues || "Waiting for execution..."}
               </div>
             </div>
 
-            {/* Asset Allocation Bar Chart */}
-            <div className="visual-bar-container">
-              <div className="visual-bar-labels">
-                <span>USDC: {usdcPercent.toFixed(0)}%</span>
-                <span>ETH: {ethPercent.toFixed(0)}%</span>
+            <div className="proof-item">
+              <div className="proof-header-row">
+                <div className="proof-label">ZK Proof Seal (Groth16)</div>
+                <button className="copy-btn" onClick={() => copyToClipboard(proofBytes, "proof")} disabled={!proofBytes}>
+                  {copiedId === "proof" ? "Copied!" : "Copy"}
+                </button>
               </div>
-              <div className="visual-bar">
-                <div className="visual-bar-fill-usdc" style={{ width: `${usdcPercent}%` }}></div>
-                <div className="visual-bar-fill-eth" style={{ width: `${ethPercent}%` }}></div>
+              <div className="proof-value-box">
+                {proofBytes || "Waiting for execution..."}
               </div>
             </div>
           </div>
-
-          {/* Cryptographic Proof Details */}
-          <div className="glass-card">
-            <div className="card-number">_03.</div>
-            <h3 className="card-title">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-              Cryptographic Proof Elements
-            </h3>
-
-            <div className="proof-container">
-              <div className="proof-item">
-                <div className="proof-header-row">
-                  <div className="proof-label">Program Image ID (VKey)</div>
-                  <button className="copy-btn" onClick={() => copyToClipboard(PROGRAM_VKEY, "vkey")}>
-                    {copiedId === "vkey" ? "Copied!" : "Copy"}
-                  </button>
-                </div>
-                <div className="proof-value-box">{PROGRAM_VKEY}</div>
-              </div>
-
-              <div className="proof-item">
-                <div className="proof-header-row">
-                  <div className="proof-label">Registered Active Weights Hash</div>
-                  <button className="copy-btn" onClick={() => copyToClipboard(CONTRACT_WEIGHTS_HASH, "weightshash")}>
-                    {copiedId === "weightshash" ? "Copied!" : "Copy"}
-                  </button>
-                </div>
-                <div className="proof-value-box">{CONTRACT_WEIGHTS_HASH}</div>
-              </div>
-
-              <div className="proof-item">
-                <div className="proof-header-row">
-                  <div className="proof-label">Public Values Commitment (EVM ABI)</div>
-                  <button className="copy-btn" onClick={() => copyToClipboard(publicValues, "pubval")} disabled={!publicValues}>
-                    {copiedId === "pubval" ? "Copied!" : "Copy"}
-                  </button>
-                </div>
-                <div className="proof-value-box">
-                  {publicValues || "Waiting for execution..."}
-                </div>
-              </div>
-
-              <div className="proof-item">
-                <div className="proof-header-row">
-                  <div className="proof-label">ZK Proof Seal (Groth16)</div>
-                  <button className="copy-btn" onClick={() => copyToClipboard(proofBytes, "proof")} disabled={!proofBytes}>
-                    {copiedId === "proof" ? "Copied!" : "Copy"}
-                  </button>
-                </div>
-                <div className="proof-value-box">
-                  {proofBytes || "Waiting for execution..."}
-                </div>
-              </div>
-            </div>
-          </div>
+        </div>
 
       </div>
 

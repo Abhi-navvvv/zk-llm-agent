@@ -484,6 +484,8 @@ header {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  height: 380px;
+  grid-column: 1 / -1;
 }
 
 .terminal-header {
@@ -493,6 +495,7 @@ header {
   display: flex;
   align-items: center;
   position: relative;
+  flex-shrink: 0;
 }
 
 .terminal-buttons {
@@ -537,24 +540,12 @@ header {
   font-size: 0.8rem;
   color: var(--mint);
   background-color: #060606;
-  height: 280px;
   overflow-y: auto;
   box-shadow: inset 0 4px 20px rgba(0, 0, 0, 0.6);
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-}
-
-@media (min-width: 1024px) {
-  .terminal-wrapper {
-    height: 100%;
-    min-height: 0;
-  }
-  .terminal-body {
-    height: 0;
-    flex: 1;
-    min-height: 0;
-  }
+  flex: 1;
 }
 
 .terminal-line {
